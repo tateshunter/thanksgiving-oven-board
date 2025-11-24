@@ -13,7 +13,6 @@
     .derived-cell { color: #cbd5e1; font-weight: 600; }
     .derived-muted { color: #6b7280; }
 
-    /* NEW: flashing alarm tile */
     @keyframes alarmFlash {
       0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.0); background-color: rgba(239,68,68,0.10); }
       50% { box-shadow: 0 0 0 6px rgba(239,68,68,0.18); background-color: rgba(239,68,68,0.25); }
@@ -113,7 +112,6 @@
           </div>
         </div>
 
-        <!-- TOP DASHBOARD -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div id="final-countdown" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
           <div id="temp-changes" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-2"></div>
@@ -169,33 +167,27 @@ const actions = [
   "serve",
 ];
 
+/* DEFAULT TIMELINE
+   - removed all placeholder "remove" rows
+*/
 const DEFAULT_TIMELINE = [
   { time: "1:00 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
-  { time: "1:35 PM", temp: 350, action: "remove", item: "coca cola cake", cookMin: "—", person: "" },
   { time: "1:35 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
   { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15, person: "" },
-  { time: "2:00 PM", temp: 375, action: "remove", item: "pb sheet cake", cookMin: "—", person: "" },
   { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
   { time: "2:45 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
   { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10, person: "" },
-  { time: "3:10 PM", temp: 375, action: "remove", item: "rolls (wrap in foil/towel)", cookMin: "—", person: "" },
   { time: "3:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50, person: "" },
   { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple casserole", cookMin: 30, person: "" },
   { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20, person: "" },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "pineapple casserole (cover w/ foil)", cookMin: "—", person: "" },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "green bean casserole (cover w/ foil)", cookMin: "—", person: "" },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "corn casserole (cover w/ foil)", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: "—", action: "set oven temp", item: "to 450", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30, person: "" },
-  { time: "4:55 PM", temp: 450, action: "remove", item: "stuffing/dressing (cover w/ foil)", cookMin: "—", person: "" },
   { time: "4:55 PM", temp: "—", action: "set oven temp", item: "to 400", cookMin: "—", person: "" },
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
-  { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—", person: "" },
   { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
-  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese", cookMin: "—", person: "" },
   { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
   { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
@@ -274,8 +266,6 @@ function parseTimeToMinutes(raw) {
 ----------------------------*/
 let timeline = DEFAULT_TIMELINE.map(r => ({ id: uuid(), ...r }));
 let view = "plan";
-
-// NEW: sort toggle for plan
 let sortAsc = true;
 
 let startedAtTs = null;
@@ -284,26 +274,19 @@ let pausedAtTs = null;
 let pausedAccumMs = 0;
 let tickInterval = null;
 
-// Prep tasks
 let prepTasks = []; // {id, person, task, done, sourceRowId?}
 
-// NEW: alarm/ack state
-let alarmActiveIds = new Set();     // timer item ids currently alarming
-let acknowledgedDoneIds = new Set();// done items user has cleared
+let alarmActiveIds = new Set();
+let acknowledgedDoneIds = new Set();
 
 /* ---------------------------
-   AUDIO ALARM (no external files)
-   - uses Web Audio API "beep-beep" loop
+   AUDIO ALARM
 ----------------------------*/
 let audioCtx = null;
-let alarmOsc = null;
-let alarmGain = null;
 let alarmInterval = null;
 
 function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 }
 
 function startGlobalAlarm() {
@@ -311,7 +294,6 @@ function startGlobalAlarm() {
   if (alarmInterval) return;
 
   const beepOnce = () => {
-    if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = "sine";
@@ -333,7 +315,7 @@ function stopGlobalAlarmIfNoneActive() {
 }
 
 /* ---------------------------
-   PERSISTENCE (localStorage)
+   PERSISTENCE
 ----------------------------*/
 const STORAGE_KEY = "thanksgiving-oven-board:v3";
 
@@ -468,11 +450,16 @@ function renderPlan() {
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
     tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${r.time ?? ""}">`;
-    tdTime.querySelector("input").addEventListener("input", (e) => {
+    const timeInput = tdTime.querySelector("input");
+    timeInput.addEventListener("input", (e) => {
       r.time = e.target.value;
       rebuildTimers();
       saveState(true);
-      renderPlan();
+      // no re-render here (fixes 1-char-at-a-time bug)
+    });
+    timeInput.addEventListener("blur", () => {
+      renderPlan(); // refresh derived "Take Out" after typing
+      saveState(true);
     });
 
     const tdTemp = document.createElement("td");
@@ -490,7 +477,8 @@ function renderPlan() {
     tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
     tdAction.querySelector("select").addEventListener("change", (e) => {
       r.action = e.target.value;
-      rebuildTimers(); seedPrepTasks(false); saveState(true); renderPlan();
+      rebuildTimers(); seedPrepTasks(false); saveState(true);
+      renderPlan(); // ok to re-render on discrete change
     });
 
     const tdItem = document.createElement("td");
@@ -504,9 +492,15 @@ function renderPlan() {
     const tdCook = document.createElement("td");
     tdCook.className = "p-2";
     tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${r.cookMin ?? ""}">`;
-    tdCook.querySelector("input").addEventListener("input", (e) => {
+    const cookInput = tdCook.querySelector("input");
+    cookInput.addEventListener("input", (e) => {
       r.cookMin = e.target.value;
-      rebuildTimers(); saveState(true); renderPlan();
+      rebuildTimers(); saveState(true);
+      // no re-render here (so typing is smooth)
+    });
+    cookInput.addEventListener("blur", () => {
+      renderPlan(); // refresh derived "Take Out"
+      saveState(true);
     });
 
     const tdTakeOut = document.createElement("td");
@@ -549,7 +543,6 @@ function renderPlan() {
   });
 }
 
-/* NEW: sort plan board by time */
 function sortTimelineByTime() {
   sortAsc = !sortAsc;
   const dir = sortAsc ? 1 : -1;
@@ -558,7 +551,7 @@ function sortTimelineByTime() {
     const ta = parseTimeToMinutes(a.time);
     const tb = parseTimeToMinutes(b.time);
     if (ta == null && tb == null) return 0;
-    if (ta == null) return 1;   // blanks go last
+    if (ta == null) return 1;
     if (tb == null) return -1;
     return (ta - tb) * dir;
   });
@@ -628,7 +621,6 @@ function rebuildTimers() {
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
 function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
 
-/* NEW: acknowledge done item and stop alarm */
 function acknowledgeDone(id){
   acknowledgedDoneIds.add(id);
   alarmActiveIds.delete(id);
@@ -702,13 +694,9 @@ function renderRun(){
     const inOven = prepLeftMs<=0 && untilDoneMs>0;
     const overdue = untilDoneMs<=0;
 
-    // NEW: alarm triggering
     const needsAlarm = overdue && !acknowledgedDoneIds.has(it.id);
-    if (needsAlarm) {
-      alarmActiveIds.add(it.id);
-    } else {
-      alarmActiveIds.delete(it.id);
-    }
+    if (needsAlarm) alarmActiveIds.add(it.id);
+    else alarmActiveIds.delete(it.id);
 
     const statusClass = overdue
       ? "bg-rose-500/20 text-rose-200 border border-rose-500/40"
@@ -744,11 +732,9 @@ function renderRun(){
     timersGrid.appendChild(card);
   });
 
-  // NEW: if any alarms active, ensure sound is running
   if (alarmActiveIds.size > 0) startGlobalAlarm();
   else stopGlobalAlarmIfNoneActive();
 
-  // wire ack buttons
   timersGrid.querySelectorAll("[data-ack]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-ack");
@@ -924,7 +910,7 @@ function renderDash(){
       <div class="bar"><div style="width:${prepPct}%"></div></div>
     </div>
     <div>
-      <div class="flex items-center justify-between text-sm mb-1"><span>🔥 Oven timeline completion</span><span>${ovenPct}%></span></div>
+      <div class="flex items-center justify-between text-sm mb-1"><span>🔥 Oven timeline completion</span><span>${ovenPct}%</span></div>
       <div class="bar"><div style="width:${ovenPct}%"></div></div>
     </div>
   `;
@@ -1060,19 +1046,6 @@ btnClearAll.addEventListener("click",()=>{
 });
 
 /* ---------------------------
-   MINI TESTS (console)
-----------------------------*/
-(function runSelfTests(){
-  console.assert(parseTimeToMinutes("1:00 PM") === 13*60, "parseTimeToMinutes 1:00 PM");
-  console.assert(parseTimeToMinutes("12:00 AM") === 0, "parseTimeToMinutes 12:00 AM");
-  console.assert(parseTimeToMinutes("12:00 PM") === 12*60, "parseTimeToMinutes 12:00 PM");
-  console.assert(fmtCountdownHours(0) === "0:00:00", "fmtCountdownHours zero");
-  console.assert(fmtCountdownHours(3661000) === "1:01:01", "fmtCountdownHours 1:01:01");
-  console.assert(normalizePerson(" emily  ") === "Emily", "normalizePerson trims + cases");
-  console.assert(timeStrFromMinutes(13*60) === "1:00 pm", "timeStrFromMinutes 1pm");
-})();
-
-/* ---------------------------
    INIT
 ----------------------------*/
 loadState();
@@ -1081,7 +1054,6 @@ rebuildTimers();
 seedPrepTasks(true);
 setView(view || "plan");
 
-// AUTO-RESUME if timers were running
 if(startedAtTs && isRunning){
   startTicking();
   setView("run");
