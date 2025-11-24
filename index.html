@@ -3,33 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Thanksgiving Oven Board (No React)</title>
+  <title>Thanksgiving Oven Board (Vanilla)</title>
 
-  <!-- Tailwind via CDN for styling only (no React needed) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html, body { height: 100%; }
+    .bar { height: 10px; border-radius: 999px; background: #1f2937; overflow: hidden; }
+    .bar > div { height: 100%; background: #76ba43; }
   </style>
 </head>
 <body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
   <div class="max-w-6xl mx-auto space-y-5">
 
     <!-- HEADER -->
-    <header class="flex items-center justify-between">
+    <header class="flex items-center justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl md:text-4xl font-semibold tracking-tight">Thanksgiving Oven Board</h1>
-        <p class="text-neutral-400 text-sm md:text-base">Plan the timeline, then run it like mission control.</p>
+        <p class="text-neutral-400 text-sm md:text-base">Plan, prep, run, and watch the whole crew in one place.</p>
       </div>
 
-      <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm">
-        <button id="tab-plan"
-          class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">
-          Plan
-        </button>
-        <button id="tab-run"
-          class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">
-          Run
-        </button>
+      <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm flex-wrap">
+        <button id="tab-plan" class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">Plan</button>
+        <button id="tab-prep" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Prep Board</button>
+        <button id="tab-run"  class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Run Timers</button>
+        <button id="tab-dash" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Dashboard</button>
       </div>
     </header>
 
@@ -38,35 +35,49 @@
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div class="text-sm text-neutral-400">Edit rows to match your exact plan.</div>
         <div class="flex items-center gap-2 flex-wrap">
-          <button id="btn-add-row"
-            class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">
-            ➕ Add row
-          </button>
-          <button id="btn-reset-template"
-            class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">
-            Reset template
-          </button>
-          <button id="btn-start-cook"
-            class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold inline-flex items-center gap-2 transition shadow">
-            ▶ Start Cook
-          </button>
+          <button id="btn-add-row" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">➕ Add row</button>
+          <button id="btn-reset-template" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Reset template</button>
+          <button id="btn-start-cook" class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold inline-flex items-center gap-2 transition shadow">▶ Start Cook</button>
         </div>
       </div>
 
       <div class="overflow-x-auto rounded-2xl border border-neutral-800 shadow-sm">
-        <table class="min-w-[900px] w-full text-sm">
+        <table class="min-w-[1000px] w-full text-sm">
           <thead class="bg-neutral-900 text-neutral-200">
             <tr>
-              <th class="text-left p-3 w-[150px]">Time</th>
-              <th class="text-left p-3 w-[120px]">Oven Temp</th>
-              <th class="text-left p-3 w-[210px]">Action</th>
+              <th class="text-left p-3 w-[140px]">Time</th>
+              <th class="text-left p-3 w-[110px]">Oven Temp</th>
+              <th class="text-left p-3 w-[200px]">Action</th>
               <th class="text-left p-3">Item</th>
               <th class="text-left p-3 w-[150px]">Cook Time</th>
+              <th class="text-left p-3 w-[160px]">Person</th>
               <th class="p-3 w-[56px]"></th>
             </tr>
           </thead>
           <tbody id="timeline-tbody"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- PREP BOARD VIEW -->
+    <section id="view-prep" class="space-y-4 hidden">
+      <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-neutral-500">prep board</div>
+            <div class="text-lg font-semibold">Tasks by person</div>
+            <div class="text-sm text-neutral-400">Auto-seeded from your plan (only when a person is assigned). Add anything else you need.</div>
+          </div>
+          <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Re-seed from plan</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
+          <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
+          <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
+          <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">Add prep task</button>
+        </div>
+
+        <div id="prep-container" class="space-y-3"></div>
       </div>
     </section>
 
@@ -83,14 +94,41 @@
           </div>
         </div>
 
+        <!-- TOP DASHBOARD -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div id="final-countdown" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
+          <div id="temp-changes" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-2"></div>
+        </div>
+
         <div id="no-timers" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 text-center hidden">
           <div class="text-lg font-semibold">No timed “put in” rows found</div>
-          <div class="text-neutral-400 mt-1 text-sm">
-            Add a planned time and numeric cook minutes to a “put in” row.
-          </div>
+          <div class="text-neutral-400 mt-1 text-sm">Add a planned time and numeric cook minutes to a “put in” row.</div>
         </div>
 
         <div id="timers-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD VIEW -->
+    <section id="view-dash" class="space-y-4 hidden">
+      <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-neutral-500">dashboard</div>
+            <div class="text-lg font-semibold">Overall status</div>
+            <div class="text-sm text-neutral-400">One glance view of prep + oven progress.</div>
+          </div>
+          <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Refresh</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div id="dash-dinner" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
+          <div id="dash-numbers" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
+        </div>
+
+        <div id="dash-bars" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-4"></div>
+
+        <div id="dash-by-person" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
       </div>
     </section>
 
@@ -100,7 +138,6 @@
 /* ---------------------------
    DATA + HELPERS
 ----------------------------*/
-
 const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
 const actions = [
   "preheat oven",
@@ -115,44 +152,45 @@ const actions = [
 ];
 
 const DEFAULT_TIMELINE = [
-  { time: "1:00 PM", temp: "—", action: "preheat oven", item: "to 350", cookMin: "—" },
-  { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20 },
-  { time: "1:35 PM", temp: 350, action: "remove", item: "coca cola cake", cookMin: "—" },
-  { time: "1:35 PM", temp: "—", action: "increase temp / preheat", item: "to 375", cookMin: "—" },
-  { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15 },
-  { time: "2:00 PM", temp: 375, action: "remove", item: "pb sheet cake", cookMin: "—" },
-  { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—" },
-  { time: "2:45 PM", temp: "—", action: "preheat oven", item: "to 375", cookMin: "—" },
-  { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10 },
-  { time: "3:10 PM", temp: 375, action: "remove", item: "rolls (wrap in foil/towel)", cookMin: "—" },
-  { time: "3:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—" },
-  { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50 },
-  { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple situation", cookMin: 30 },
-  { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20 },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "pineapple situation (cover w/ foil)", cookMin: "—" },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "green bean casserole (cover w/ foil)", cookMin: "—" },
-  { time: "4:25 PM", temp: 350, action: "remove", item: "corn casserole (cover w/ foil)", cookMin: "—" },
-  { time: "4:25 PM", temp: "—", action: "increase temp / preheat", item: "to 450", cookMin: "—" },
-  { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30 },
-  { time: "4:55 PM", temp: 450, action: "remove", item: "stuffing/dressing (cover w/ foil)", cookMin: "—" },
-  { time: "4:55 PM", temp: "—", action: "decrease temp / preheat", item: "to 400", cookMin: "—" },
-  { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12 },
-  { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—" },
-  { time: "5:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—" },
-  { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese – em version", cookMin: 30 },
-  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese – em version", cookMin: "—" },
-  { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—" },
-  { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)" },
-  { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—" },
+  { time: "1:00 PM", temp: "—", action: "preheat oven", item: "to 350", cookMin: "—", person: "" },
+  { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
+  { time: "1:35 PM", temp: 350, action: "remove", item: "coca cola cake", cookMin: "—", person: "" },
+  { time: "1:35 PM", temp: "—", action: "increase temp / preheat", item: "to 375", cookMin: "—", person: "" },
+  { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15, person: "" },
+  { time: "2:00 PM", temp: 375, action: "remove", item: "pb sheet cake", cookMin: "—", person: "" },
+  { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
+  { time: "2:45 PM", temp: "—", action: "preheat oven", item: "to 375", cookMin: "—", person: "" },
+  { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10, person: "" },
+  { time: "3:10 PM", temp: 375, action: "remove", item: "rolls (wrap in foil/towel)", cookMin: "—", person: "" },
+  { time: "3:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—", person: "" },
+  { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50, person: "" },
+  { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple situation", cookMin: 30, person: "" },
+  { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20, person: "" },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "pineapple situation (cover w/ foil)", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "green bean casserole (cover w/ foil)", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "corn casserole (cover w/ foil)", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: "—", action: "increase temp / preheat", item: "to 450", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30, person: "" },
+  { time: "4:55 PM", temp: 450, action: "remove", item: "stuffing/dressing (cover w/ foil)", cookMin: "—", person: "" },
+  { time: "4:55 PM", temp: "—", action: "decrease temp / preheat", item: "to 400", cookMin: "—", person: "" },
+  { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
+  { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—", person: "" },
+  { time: "5:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—", person: "" },
+  { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese – em version", cookMin: 30, person: "" },
+  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese – em version", cookMin: "—", person: "" },
+  { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
+  { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
+  { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
 ];
 
 function uuid() { return crypto.randomUUID(); }
 
-function fmtCountdown(ms) {
+function fmtCountdownHours(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  const min = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  return `${min}:${String(sec).padStart(2, "0")}`;
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 function timeStrFromDate(d) {
@@ -164,13 +202,15 @@ function timeStrFromDate(d) {
 }
 
 function titleCase(str = "") {
-  return str
-    .toLowerCase()
-    .split(/\s+/)
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ""))
-    .join(" ")
-    .replace(/\bW\//g, "w/")
-    .replace(/\bEm\b/g, "Em");
+  return str.toLowerCase().trim().split(/ +/).filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+// Normalize person names so "emily", "Emily ", "EMILY" group together.
+function normalizePerson(str = "") {
+  const trimmed = String(str || "").trim();
+  if (!trimmed) return "";
+  return titleCase(trimmed);
 }
 
 function capFirst(str = "") {
@@ -182,21 +222,20 @@ function parseTimeToMinutes(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
   if (!s) return null;
-
   const firstPart = s.split("–")[0].split("-")[0].trim();
-  const m = firstPart.match(/(\d{1,2})\s*:\s*(\d{2})\s*(am|pm)/i);
+  const m = firstPart.match(/([0-9]{1,2}) *: *([0-9]{2}) *(am|pm)/i);
   if (!m) return null;
-
   let hh = parseInt(m[1], 10);
   const mm = parseInt(m[2], 10);
   const ap = m[3].toLowerCase();
-
   if (ap === "pm" && hh !== 12) hh += 12;
   if (ap === "am" && hh === 12) hh = 0;
-
   return hh * 60 + mm;
 }
 
+/* ---------------------------
+   STATE
+----------------------------*/
 let timeline = DEFAULT_TIMELINE.map(r => ({ id: uuid(), ...r }));
 let view = "plan";
 
@@ -206,10 +245,22 @@ let pausedAtTs = null;
 let pausedAccumMs = 0;
 let tickInterval = null;
 
+// Prep tasks (manual + seeded)
+let prepTasks = []; // {id, person, task, done, sourceRowId?}
+
+/* ---------------------------
+   DOM REFS
+----------------------------*/
 const tabPlan = document.getElementById("tab-plan");
+const tabPrep = document.getElementById("tab-prep");
 const tabRun  = document.getElementById("tab-run");
+const tabDash = document.getElementById("tab-dash");
+
 const viewPlan = document.getElementById("view-plan");
+const viewPrep = document.getElementById("view-prep");
 const viewRun  = document.getElementById("view-run");
+const viewDash = document.getElementById("view-dash");
+
 const tbody = document.getElementById("timeline-tbody");
 
 const btnAddRow = document.getElementById("btn-add-row");
@@ -224,78 +275,65 @@ const btnRunReset  = document.getElementById("btn-run-reset");
 
 const noTimers = document.getElementById("no-timers");
 const timersGrid = document.getElementById("timers-grid");
+const finalCountdownBox = document.getElementById("final-countdown");
+const tempChangesBox = document.getElementById("temp-changes");
 
+const prepContainer = document.getElementById("prep-container");
+const prepPersonInput = document.getElementById("prep-person");
+const prepTaskInput = document.getElementById("prep-task");
+const btnPrepAdd = document.getElementById("btn-prep-add");
+const btnPrepSeed = document.getElementById("btn-prep-seed");
+
+const dashDinner = document.getElementById("dash-dinner");
+const dashNumbers = document.getElementById("dash-numbers");
+const dashBars = document.getElementById("dash-bars");
+const dashByPerson = document.getElementById("dash-by-person");
+const btnDashRefresh = document.getElementById("btn-dash-refresh");
+
+/* ---------------------------
+   PLAN TABLE
+----------------------------*/
 function renderPlan() {
   tbody.innerHTML = "";
-
   timeline.forEach((r, idx) => {
     const tr = document.createElement("tr");
     tr.className = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
 
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
-    tdTime.innerHTML = `
-      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
-             placeholder="e.g., 3:35 PM"
-             value="${r.time ?? ""}">
-    `;
-    tdTime.querySelector("input").addEventListener("input", (e) => {
-      r.time = e.target.value;
-      rebuildTimers();
-    });
+    tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${r.time ?? ""}">`;
+    tdTime.querySelector("input").addEventListener("input", (e) => { r.time = e.target.value; rebuildTimers(); });
 
     const tdTemp = document.createElement("td");
     tdTemp.className = "p-2";
-    const tempOptions = temps.map(t =>
-      `<option value="${t}" ${String(r.temp)===String(t)?"selected":""}>${t==="—"?"—":t+"°F"}</option>`
-    ).join("");
-    tdTemp.innerHTML = `
-      <select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">
-        ${tempOptions}
-      </select>
-    `;
-    tdTemp.querySelector("select").addEventListener("change", (e) => {
-      r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10);
-      rebuildTimers();
-    });
+    const tempOptions = temps.map(t => `<option value="${t}" ${String(r.temp)===String(t)?"selected":""}>${t==="—"?"—":t+"°F"}</option>`).join("");
+    tdTemp.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${tempOptions}</select>`;
+    tdTemp.querySelector("select").addEventListener("change", (e) => { r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10); rebuildTimers(); });
 
     const tdAction = document.createElement("td");
     tdAction.className = "p-2";
-    const actionOptions = actions.map(a =>
-      `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`
-    ).join("");
-    tdAction.innerHTML = `
-      <select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">
-        ${actionOptions}
-      </select>
-    `;
-    tdAction.querySelector("select").addEventListener("change", (e) => {
-      r.action = e.target.value;
-      rebuildTimers();
-    });
+    const actionOptions = actions.map(a => `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`).join("");
+    tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
+    tdAction.querySelector("select").addEventListener("change", (e) => { r.action = e.target.value; rebuildTimers(); seedPrepTasks(false); });
 
     const tdItem = document.createElement("td");
     tdItem.className = "p-2";
-    tdItem.innerHTML = `
-      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
-             placeholder="dish or note"
-             value="${r.item ?? ""}">
-    `;
-    tdItem.querySelector("input").addEventListener("input", (e) => {
-      r.item = e.target.value;
-      rebuildTimers();
-    });
+    tdItem.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="dish or note" value="${r.item ?? ""}">`;
+    tdItem.querySelector("input").addEventListener("input", (e) => { r.item = e.target.value; rebuildTimers(); seedPrepTasks(false); });
 
     const tdCook = document.createElement("td");
     tdCook.className = "p-2";
-    tdCook.innerHTML = `
-      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
-             placeholder="min or —"
-             value="${r.cookMin ?? ""}">
-    `;
-    tdCook.querySelector("input").addEventListener("input", (e) => {
-      r.cookMin = e.target.value;
+    tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${r.cookMin ?? ""}">`;
+    tdCook.querySelector("input").addEventListener("input", (e) => { r.cookMin = e.target.value; rebuildTimers(); });
+
+    const tdPerson = document.createElement("td");
+    tdPerson.className = "p-2";
+    tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${r.person ?? ""}">`;
+    tdPerson.querySelector("input").addEventListener("input", (e) => {
+      r.person = normalizePerson(e.target.value);
+      e.target.value = r.person; // keep UI normalized
       rebuildTimers();
+      seedPrepTasks(false);
     });
 
     const tdDel = document.createElement("td");
@@ -303,66 +341,73 @@ function renderPlan() {
     tdDel.innerHTML = `<button class="text-neutral-400 hover:text-red-400" title="delete row">🗑</button>`;
     tdDel.querySelector("button").addEventListener("click", () => {
       timeline = timeline.filter(x => x.id !== r.id);
-      renderPlan();
-      rebuildTimers();
+      prepTasks = prepTasks.filter(t => t.sourceRowId !== r.id);
+      renderPlan(); rebuildTimers(); renderPrep(); renderDash();
     });
 
-    tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdDel);
+    tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdPerson, tdDel);
     tbody.appendChild(tr);
   });
 }
 
+/* ---------------------------
+   TIMERS / RUN VIEW
+----------------------------*/
+const TEMP_CHANGE_ACTIONS = new Set(["preheat oven","increase temp / preheat","decrease temp / preheat"]);
+
 function isTimedPutIn(row) {
-  const hasNumericCook = typeof row.cookMin === "number" || /\d/.test(String(row.cookMin));
+  const hasNumericCook = typeof row.cookMin === "number" || /[0-9]/.test(String(row.cookMin));
   return row.action === "put in" && hasNumericCook && parseTimeToMinutes(row.time) != null;
+}
+function isTempChange(row) {
+  return TEMP_CHANGE_ACTIONS.has(row.action) && parseTimeToMinutes(row.time) != null;
 }
 
 let timerItems = [];
+let tempChangeItems = [];
 let anchorMin = null;
+let finalDoneOffsetMs = null;
+let dinnerOffsetMs = null;
 
 function rebuildTimers() {
-  const parseableTimes = timeline
-    .map(r => parseTimeToMinutes(r.time))
-    .filter(v => v != null);
-
+  const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
   if (!parseableTimes.length) {
-    timerItems = [];
-    anchorMin = null;
-    renderRun();
+    timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
+    renderRun(); renderDash();
     return;
   }
-
   anchorMin = Math.min(...parseableTimes);
 
-  timerItems = timeline
-    .filter(isTimedPutIn)
-    .map(r => {
-      const plannedMin = parseTimeToMinutes(r.time);
-      const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
-      const inOffsetMin = plannedMin - anchorMin;
-      const doneOffsetMin = inOffsetMin + dur;
-      return {
-        id: r.id,
-        item: r.item,
-        temp: r.temp,
-        plannedTime: r.time,
-        cookMin: dur,
-        inOffsetMs: inOffsetMin * 60 * 1000,
-        doneOffsetMs: doneOffsetMin * 60 * 1000,
-      };
-    })
-    .sort((a,b) => a.inOffsetMs - b.inOffsetMs);
+  timerItems = timeline.filter(isTimedPutIn).map(r => {
+    const plannedMin = parseTimeToMinutes(r.time);
+    const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
+    const inOffsetMin = plannedMin - anchorMin;
+    const doneOffsetMin = inOffsetMin + dur;
+    return { id:r.id, item:r.item, person:r.person, temp:r.temp, plannedTime:r.time, cookMin:dur,
+      inOffsetMs: inOffsetMin*60000, doneOffsetMs: doneOffsetMin*60000 };
+  }).sort((a,b)=>a.inOffsetMs-b.inOffsetMs);
 
-  renderRun();
+  finalDoneOffsetMs = timerItems.length ? Math.max(...timerItems.map(t=>t.doneOffsetMs)) : null;
+
+  tempChangeItems = timeline.filter(isTempChange).map(r => {
+    const plannedMin = parseTimeToMinutes(r.time);
+    const offsetMin = plannedMin - anchorMin;
+    const targetTemp = r.temp !== "—" ? r.temp : null;
+    return { id:r.id, time:r.time, action:r.action, item:r.item, targetTemp, offsetMs: offsetMin*60000 };
+  }).sort((a,b)=>a.offsetMs-b.offsetMs);
+
+  const serveRow = timeline.find(r => r.action === "serve" && parseTimeToMinutes(r.time)!=null);
+  dinnerOffsetMs = serveRow
+    ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
+    : finalDoneOffsetMs;
+
+  renderRun(); renderDash();
 }
 
-function elapsedMs() {
-  if (!startedAtTs) return 0;
-  const effectiveNow = isRunning ? Date.now() : (pausedAtTs || Date.now());
-  return Math.max(0, effectiveNow - startedAtTs - pausedAccumMs);
-}
+function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
+function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
 
-function renderRun() {
+function renderRun(){
   btnRunReset.classList.toggle("hidden", !startedAtTs);
   btnRunPause.classList.toggle("hidden", !(startedAtTs && isRunning));
   btnRunResume.classList.toggle("hidden", !(startedAtTs && !isRunning));
@@ -374,152 +419,380 @@ function renderRun() {
 
   timersGrid.innerHTML = "";
 
-  if (!timerItems.length) {
-    noTimers.classList.remove("hidden");
-    return;
+  if(!startedAtTs || finalDoneOffsetMs==null){
+    finalCountdownBox.innerHTML = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500">final countdown</div>
+      <div class="text-2xl font-semibold mt-1">Start cook to see final timer</div>
+      <div class="text-neutral-400 text-sm mt-1">Time until the last timed dish is done.</div>`;
   } else {
-    noTimers.classList.add("hidden");
+    const remainingFinalMs = Math.max(0, finalDoneOffsetMs - elapsedMs());
+    const targetFinalTs = effectiveNowTs() + remainingFinalMs;
+    finalCountdownBox.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-neutral-500">final countdown</div>
+          <div class="text-5xl md:text-6xl font-bold mt-2">${fmtCountdownHours(remainingFinalMs)}</div>
+          <div class="text-neutral-300 mt-2 text-sm">Until the last thing is done</div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
+          <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
+        </div>
+      </div>`;
   }
 
+  if(!tempChangeItems.length){
+    tempChangesBox.innerHTML = `<div class="text-xs uppercase tracking-widest text-neutral-500">oven temp changes</div><div class="text-sm text-neutral-400">No planned temp changes found.</div>`;
+  } else {
+    const eMs = elapsedMs();
+    tempChangesBox.innerHTML = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500">oven temp changes</div>
+      <div class="space-y-2">
+      ${tempChangeItems.map(tc=>{
+        const rem = tc.offsetMs - eMs;
+        const due = rem<=0;
+        const label = tc.action==="preheat oven"?"Preheat":"Change temp";
+        const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : (tc.item||"—");
+        return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
+          <div><div class="text-sm font-medium">${label} → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
+          <div class="text-sm font-semibold ${due?"text-amber-300":"text-neutral-100"}">${due?"NOW":fmtCountdownHours(rem)}</div>
+        </div>`;
+      }).join("")}
+      </div>`;
+  }
+
+  if(!timerItems.length){ noTimers.classList.remove("hidden"); return; }
+  noTimers.classList.add("hidden");
+
   const eMs = elapsedMs();
-
-  timerItems.forEach(it => {
-    const untilOvenMs = it.inOffsetMs - eMs;
+  timerItems.forEach(it=>{
+    const prepLeftMs = it.inOffsetMs - eMs;
     const untilDoneMs = it.doneOffsetMs - eMs;
-
-    const inOven = untilOvenMs <= 0 && untilDoneMs > 0;
-    const overdue = untilDoneMs <= 0;
+    const inOven = prepLeftMs<=0 && untilDoneMs>0;
+    const overdue = untilDoneMs<=0;
 
     const statusClass = overdue
       ? "bg-rose-500/20 text-rose-200 border border-rose-500/40"
       : inOven
       ? "bg-amber-500/20 text-amber-200 border border-amber-500/40"
       : "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
-
-    const statusText = overdue
-      ? "should be done"
-      : inOven
-      ? "in oven now"
-      : "waiting to go in";
+    const statusText = overdue?"should be done":inOven?"in oven now":"prep time left";
 
     const card = document.createElement("div");
     card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
-
     card.innerHTML = `
       <div class="space-y-0.5">
-        <div class="text-lg font-semibold">${titleCase(it.item || "(Unnamed Dish)")}</div>
-        <div class="text-xs text-neutral-400">
-          Planned in: ${it.plannedTime} • ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
-        </div>
+        <div class="text-lg font-semibold">${titleCase(it.item||"(Unnamed Dish)")}</div>
+        <div class="text-xs text-neutral-400">Planned in: ${it.plannedTime} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}</div>
+        ${it.person ? `<div class="text-xs text-neutral-300">👤 ${titleCase(it.person)}</div>` : ``}
       </div>
-
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-        <div class="text-xs text-neutral-400">time until oven</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdown(untilOvenMs)}</div>
+        <div class="text-xs text-neutral-400">prep time left (until oven)</div>
+        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(prepLeftMs)}</div>
       </div>
-
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">time until done</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdown(untilDoneMs)}</div>
+        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
       </div>
-
-      <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">
-        ${statusText}
-      </div>
-    `;
-
+      <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">${statusText}</div>`;
     timersGrid.appendChild(card);
   });
 }
 
-function startRun() {
-  startedAtTs = Date.now();
-  isRunning = true;
-  pausedAtTs = null;
-  pausedAccumMs = 0;
-  setView("run");
-  startTicking();
-  renderRun();
-}
+function startRun(){ startedAtTs=Date.now(); isRunning=true; pausedAtTs=null; pausedAccumMs=0; setView("run"); startTicking(); renderRun(); renderDash(); }
+function pauseRun(){ if(!isRunning) return; isRunning=false; pausedAtTs=Date.now(); stopTicking(); renderRun(); renderDash(); }
+function resumeRun(){ if(!startedAtTs) return startRun(); if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; } isRunning=true; startTicking(); renderRun(); renderDash(); }
+function resetRun(){ stopTicking(); startedAtTs=null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; renderRun(); renderDash(); }
+function startTicking(){ stopTicking(); tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500); }
+function stopTicking(){ if(tickInterval) clearInterval(tickInterval); tickInterval=null; }
 
-function pauseRun() {
-  if (!isRunning) return;
-  isRunning = false;
-  pausedAtTs = Date.now();
-  stopTicking();
-  renderRun();
-}
+/* ---------------------------
+   PREP BOARD
+----------------------------*/
+function seedPrepTasks(force=true){
+  const rowsWithItems = timeline.filter(r => r.item && String(r.item).trim() && r.action !== "flex / oven off");
 
-function resumeRun() {
-  if (!startedAtTs) return startRun();
-  if (pausedAtTs) {
-    pausedAccumMs += (Date.now() - pausedAtTs);
-    pausedAtTs = null;
+  if (force) {
+    // keep only manual tasks (no sourceRowId)
+    prepTasks = prepTasks.filter(t => !t.sourceRowId);
   }
-  isRunning = true;
-  startTicking();
-  renderRun();
+
+  rowsWithItems.forEach(r => {
+    const personName = normalizePerson(r.person);
+
+    // no auto “Unassigned”: if no person, skip seeding
+    if (!personName) return;
+
+    const exists = prepTasks.some(t => t.sourceRowId === r.id);
+    const newTaskText = `${capFirst(r.action)} — ${titleCase(r.item)}`;
+
+    if (!exists) {
+      prepTasks.push({
+        id: uuid(),
+        person: personName,
+        task: newTaskText,
+        done: false,
+        sourceRowId: r.id,
+      });
+    } else if (force) {
+      prepTasks = prepTasks.map(t => t.sourceRowId===r.id ? { ...t, person: personName, task: newTaskText } : t);
+    }
+  });
+
+  renderPrep();
+  renderDash();
 }
 
-function resetRun() {
-  stopTicking();
-  startedAtTs = null;
-  isRunning = false;
-  pausedAtTs = null;
-  pausedAccumMs = 0;
-  renderRun();
+function addPrepTask(person, task){
+  const p = normalizePerson(person);
+  const t = String(task || "").trim();
+  if(!t) return;
+
+  // allow adding without a person, but it won't display until a person is set
+  prepTasks.push({ id: uuid(), person: p, task: t, done:false });
+
+  prepPersonInput.value=""; prepTaskInput.value="";
+  renderPrep(); renderDash();
 }
 
-function startTicking() {
-  stopTicking();
-  tickInterval = setInterval(renderRun, 500);
+function renderPrep(){
+  prepContainer.innerHTML = "";
+  const visibleTasks = prepTasks.filter(t => normalizePerson(t.person));
+
+  if(!visibleTasks.length){
+    prepContainer.innerHTML = `<div class="text-sm text-neutral-400">No prep tasks assigned yet. Add some above and include a person.</div>`;
+    return;
+  }
+
+  const byPerson = {};
+  visibleTasks.forEach(t => {
+    const p = normalizePerson(t.person);
+    byPerson[p] = byPerson[p] || [];
+    byPerson[p].push(t);
+  });
+
+  Object.keys(byPerson).sort().forEach(person => {
+    const tasks = byPerson[person];
+    const doneCount = tasks.filter(x=>x.done).length;
+
+    const card = document.createElement("div");
+    card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2";
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold">${titleCase(person)}</div>
+        <div class="text-xs text-neutral-400">${doneCount}/${tasks.length} done</div>
+      </div>
+      <div class="space-y-1" id="prep-list-${person}"></div>
+    `;
+    prepContainer.appendChild(card);
+
+    const list = card.querySelector(`#prep-list-${CSS.escape(person)}`);
+    tasks.forEach(t => {
+      const row = document.createElement("label");
+      row.className = "flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 cursor-pointer";
+      row.innerHTML = `
+        <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} />
+        <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${t.task}</span>
+        <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete">delete</button>
+      `;
+      row.querySelector("input").addEventListener("change", (e)=>{ t.done=e.target.checked; renderPrep(); renderDash(); });
+      row.querySelector("button").addEventListener("click", (e)=>{ e.preventDefault(); prepTasks = prepTasks.filter(x=>x.id!==t.id); renderPrep(); renderDash(); });
+      list.appendChild(row);
+    });
+  });
 }
-function stopTicking() {
-  if (tickInterval) clearInterval(tickInterval);
-  tickInterval = null;
+
+/* ---------------------------
+   DASHBOARD
+----------------------------*/
+function renderDash(){
+  if(!startedAtTs || dinnerOffsetMs==null){
+    dashDinner.innerHTML = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
+      <div class="text-2xl font-semibold mt-1">🍽️ Start cook to activate countdown</div>
+      <div class="text-neutral-400 text-sm mt-1">Dinner time is based on your “serve” row (or last done item).</div>`;
+  } else {
+    const remMs = Math.max(0, dinnerOffsetMs - elapsedMs());
+    const dinnerTs = effectiveNowTs() + remMs;
+    const urgency = remMs <= 15*60*1000;
+    dashDinner.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
+          <div class="text-5xl md:text-6xl font-bold mt-2 ${urgency ? "animate-pulse text-amber-200" : "text-neutral-100"}">${fmtCountdownHours(remMs)}</div>
+          <div class="text-neutral-300 mt-2 text-sm">Until serve time</div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-neutral-500 uppercase tracking-widest">serve at</div>
+          <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(dinnerTs))}</div>
+          <div class="text-xs text-neutral-400 mt-1">${urgency ? "🚨 final stretch" : "✅ cruising"}</div>
+        </div>
+      </div>`;
+  }
+
+  const totalPrep = prepTasks.length;
+  const donePrep = prepTasks.filter(t=>t.done).length;
+  const prepPct = totalPrep ? Math.round(donePrep/totalPrep*100) : 0;
+
+  const totalOven = timerItems.length;
+  const doneOven = totalOven ? timerItems.filter(t => startedAtTs && elapsedMs() >= t.doneOffsetMs).length : 0;
+  const ovenPct = totalOven ? Math.round(doneOven/totalOven*100) : 0;
+
+  const nextOven = (() => {
+    if(!startedAtTs) return null;
+    const eMs = elapsedMs();
+    return timerItems.find(t => t.inOffsetMs - eMs > 0) || null;
+  })();
+
+  dashNumbers.innerHTML = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">stats</div>
+    <div class="text-sm">🧑‍🍳 Prep tasks: <span class="font-semibold">${donePrep}/${totalPrep}</span></div>
+    <div class="text-sm">🔥 Oven dishes done: <span class="font-semibold">${doneOven}/${totalOven}</span></div>
+    <div class="text-sm">🌡️ Temp changes left: <span class="font-semibold">${tempChangeItems.length}</span></div>
+    ${nextOven ? `<div class="mt-2 text-xs text-neutral-300">Next oven item: <span class="font-semibold">${titleCase(nextOven.item||"")}</span> in ${fmtCountdownHours(nextOven.inOffsetMs - elapsedMs())}</div>` : ``}
+  `;
+
+  dashBars.innerHTML = `
+    <div>
+      <div class="flex items-center justify-between text-sm mb-1"><span>🧑‍🍳 Prep completion</span><span>${prepPct}%</span></div>
+      <div class="bar"><div style="width:${prepPct}%"></div></div>
+    </div>
+    <div>
+      <div class="flex items-center justify-between text-sm mb-1"><span>🔥 Oven timeline completion</span><span>${ovenPct}%</span></div>
+      <div class="bar"><div style="width:${ovenPct}%"></div></div>
+    </div>
+  `;
+
+  const people = new Set([
+    ...prepTasks.filter(t=>normalizePerson(t.person)).map(t=>normalizePerson(t.person)),
+    ...timeline.filter(r=>normalizePerson(r.person)).map(r=>normalizePerson(r.person))
+  ]);
+
+  window.__openPeople = window.__openPeople || new Set();
+  const openPeople = window.__openPeople;
+
+  const byPersonHtml = [...people].sort().map(p => {
+    const prepForP = prepTasks.filter(t=>normalizePerson(t.person)===p);
+    const doneForP = prepForP.filter(t=>t.done).length;
+    const isOpen = openPeople.has(p);
+
+    const prepList = prepForP.length ? prepForP.map(t => {
+      const box = t.done ? "✅" : "⬜";
+      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${t.task}</div>`;
+    }).join("") : `<div class="text-xs text-neutral-500">No prep tasks</div>`;
+
+    return `
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl">
+        <button data-person="${p}" class="w-full px-3 py-3 flex items-center justify-between hover:bg-neutral-800/60 transition rounded-xl">
+          <div>
+            <div class="text-sm font-medium">${titleCase(p)}</div>
+            <div class="text-xs text-neutral-400">Prep ${doneForP}/${prepForP.length}</div>
+          </div>
+          <div class="text-xs text-neutral-300 flex items-center gap-2">
+            <span>${prepForP.length} tasks</span>
+            <span class="chev">${isOpen ? "▴" : "▾"}</span>
+          </div>
+        </button>
+        <div class="person-details ${isOpen ? "" : "hidden"} px-3 pb-3 space-y-2">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-neutral-500 mb-1">prep tasks</div>
+            <div class="space-y-1">${prepList}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  dashByPerson.innerHTML = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">by person</div>
+    <div class="space-y-2">${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}</div>
+  `;
+
+  dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.getAttribute("data-person");
+      const details = btn.parentElement.querySelector(".person-details");
+      const chev = btn.querySelector(".chev");
+      const open = !details.classList.contains("hidden");
+
+      details.classList.toggle("hidden", open);
+      chev.textContent = open ? "▾" : "▴";
+
+      if(open) openPeople.delete(key);
+      else openPeople.add(key);
+    });
+  });
 }
 
-function setView(next) {
-  view = next;
-  const isPlan = view === "plan";
-  viewPlan.classList.toggle("hidden", !isPlan);
-  viewRun.classList.toggle("hidden", isPlan);
+/* ---------------------------
+   VIEW SWITCHING
+----------------------------*/
+function setView(next){
+  view=next;
+  viewPlan.classList.toggle("hidden", view!=="plan");
+  viewPrep.classList.toggle("hidden", view!=="prep");
+  viewRun.classList.toggle("hidden",  view!=="run");
+  viewDash.classList.toggle("hidden", view!=="dash");
 
-  tabPlan.className = isPlan
-    ? "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white"
-    : "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
-  tabRun.className = !isPlan
-    ? "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white"
-    : "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
+  const on = "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white";
+  const off = "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
+  tabPlan.className = view==="plan"?on:off;
+  tabPrep.className = view==="prep"?on:off;
+  tabRun.className  = view==="run"?on:off;
+  tabDash.className = view==="dash"?on:off;
 
-  if (!isPlan) renderRun();
+  if(view==="prep") renderPrep();
+  if(view==="run") renderRun();
+  if(view==="dash") renderDash();
 }
 
-tabPlan.addEventListener("click", () => setView("plan"));
-tabRun.addEventListener("click", () => setView("run"));
+/* ---------------------------
+   EVENT WIRES
+----------------------------*/
+tabPlan.addEventListener("click",()=>setView("plan"));
+tabPrep.addEventListener("click",()=>setView("prep"));
+tabRun.addEventListener("click",()=>setView("run"));
+tabDash.addEventListener("click",()=>setView("dash"));
 
-btnAddRow.addEventListener("click", () => {
-  timeline.push({ id: uuid(), time: "", temp: 350, action: "put in", item: "", cookMin: 10 });
-  renderPlan();
-  rebuildTimers();
+btnAddRow.addEventListener("click",()=>{
+  timeline.push({id:uuid(),time:"",temp:350,action:"put in",item:"",cookMin:10,person:""});
+  renderPlan(); rebuildTimers(); seedPrepTasks(false);
 });
-
-btnResetTemplate.addEventListener("click", () => {
-  timeline = DEFAULT_TIMELINE.map(r => ({ id: uuid(), ...r }));
-  resetRun();
-  renderPlan();
-  rebuildTimers();
+btnResetTemplate.addEventListener("click",()=>{
+  timeline=DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
+  prepTasks = prepTasks.filter(t=>!t.sourceRowId);
+  resetRun(); renderPlan(); rebuildTimers(); seedPrepTasks(true);
 });
+btnStartCook.addEventListener("click",startRun);
 
-btnStartCook.addEventListener("click", startRun);
+btnRunStart.addEventListener("click",startRun);
+btnRunPause.addEventListener("click",pauseRun);
+btnRunResume.addEventListener("click",resumeRun);
+btnRunReset.addEventListener("click",resetRun);
 
-btnRunStart.addEventListener("click", startRun);
-btnRunPause.addEventListener("click", pauseRun);
-btnRunResume.addEventListener("click", resumeRun);
-btnRunReset.addEventListener("click", resetRun);
+btnPrepAdd.addEventListener("click",()=>addPrepTask(prepPersonInput.value, prepTaskInput.value));
+btnPrepSeed.addEventListener("click",()=>seedPrepTasks(true));
 
+btnDashRefresh.addEventListener("click",()=>renderDash());
+
+/* ---------------------------
+   MINI TESTS (console)
+----------------------------*/
+(function runSelfTests(){
+  console.assert(parseTimeToMinutes("1:00 PM") === 13*60, "parseTimeToMinutes 1:00 PM");
+  console.assert(parseTimeToMinutes("12:00 AM") === 0, "parseTimeToMinutes 12:00 AM");
+  console.assert(parseTimeToMinutes("12:00 PM") === 12*60, "parseTimeToMinutes 12:00 PM");
+  console.assert(fmtCountdownHours(0) === "0:00:00", "fmtCountdownHours zero");
+  console.assert(fmtCountdownHours(3661000) === "1:01:01", "fmtCountdownHours 1:01:01");
+  console.assert(normalizePerson(" emily  ") === "Emily", "normalizePerson trims + cases");
+})();
+
+/* ---------------------------
+   INIT
+----------------------------*/
 renderPlan();
 rebuildTimers();
+seedPrepTasks(true);
 setView("plan");
 </script>
 </body>
