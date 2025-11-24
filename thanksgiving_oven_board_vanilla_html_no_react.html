@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Thanksgiving Oven Board (No React)</title>
+
+  <!-- Tailwind via CDN for styling only (no React needed) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+  </style>
+</head>
+<body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
+  <div class="max-w-6xl mx-auto space-y-5">
+
+    <!-- HEADER -->
+    <header class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl md:text-4xl font-semibold tracking-tight">Thanksgiving Oven Board</h1>
+        <p class="text-neutral-400 text-sm md:text-base">Plan the timeline, then run it like mission control.</p>
+      </div>
+
+      <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm">
+        <button id="tab-plan"
+          class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">
+          Plan
+        </button>
+        <button id="tab-run"
+          class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">
+          Run
+        </button>
+      </div>
+    </header>
+
+    <!-- PLAN VIEW -->
+    <section id="view-plan" class="space-y-3">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div class="text-sm text-neutral-400">Edit rows to match your exact plan.</div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button id="btn-add-row"
+            class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">
+            ➕ Add row
+          </button>
+          <button id="btn-reset-template"
+            class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">
+            Reset template
+          </button>
+          <button id="btn-start-cook"
+            class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold inline-flex items-center gap-2 transition shadow">
+            ▶ Start Cook
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-2xl border border-neutral-800 shadow-sm">
+        <table class="min-w-[900px] w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-200">
+            <tr>
+              <th class="text-left p-3 w-[150px]">Time</th>
+              <th class="text-left p-3 w-[120px]">Oven Temp</th>
+              <th class="text-left p-3 w-[210px]">Action</th>
+              <th class="text-left p-3">Item</th>
+              <th class="text-left p-3 w-[150px]">Cook Time</th>
+              <th class="p-3 w-[56px]"></th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- RUN VIEW -->
+    <section id="view-run" class="space-y-4 hidden">
+      <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div id="run-started-label" class="text-sm text-neutral-400">Not started</div>
+          <div class="flex items-center gap-2">
+            <button id="btn-run-start" class="bg-blue-500 text-neutral-950 rounded-xl px-3 py-2 font-semibold inline-flex items-center gap-2 hidden">▶ Start</button>
+            <button id="btn-run-resume" class="bg-blue-500 text-neutral-950 rounded-xl px-3 py-2 font-semibold inline-flex items-center gap-2 hidden">▶ Resume</button>
+            <button id="btn-run-pause" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 font-semibold inline-flex items-center gap-2 hidden">⏸ Pause</button>
+            <button id="btn-run-reset" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 inline-flex items-center gap-2 hidden">↺ Reset</button>
+          </div>
+        </div>
+
+        <div id="no-timers" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 text-center hidden">
+          <div class="text-lg font-semibold">No timed “put in” rows found</div>
+          <div class="text-neutral-400 mt-1 text-sm">
+            Add a planned time and numeric cook minutes to a “put in” row.
+          </div>
+        </div>
+
+        <div id="timers-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+/* ---------------------------
+   DATA + HELPERS
+----------------------------*/
+
+const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
+const actions = [
+  "preheat oven",
+  "put in",
+  "remove",
+  "increase temp / preheat",
+  "decrease temp / preheat",
+  "flex / oven off",
+  "optional reheat window",
+  "reheat if desired (covered)",
+  "serve",
+];
+
+const DEFAULT_TIMELINE = [
+  { time: "1:00 PM", temp: "—", action: "preheat oven", item: "to 350", cookMin: "—" },
+  { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20 },
+  { time: "1:35 PM", temp: 350, action: "remove", item: "coca cola cake", cookMin: "—" },
+  { time: "1:35 PM", temp: "—", action: "increase temp / preheat", item: "to 375", cookMin: "—" },
+  { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15 },
+  { time: "2:00 PM", temp: 375, action: "remove", item: "pb sheet cake", cookMin: "—" },
+  { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—" },
+  { time: "2:45 PM", temp: "—", action: "preheat oven", item: "to 375", cookMin: "—" },
+  { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10 },
+  { time: "3:10 PM", temp: 375, action: "remove", item: "rolls (wrap in foil/towel)", cookMin: "—" },
+  { time: "3:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—" },
+  { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50 },
+  { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple situation", cookMin: 30 },
+  { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20 },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "pineapple situation (cover w/ foil)", cookMin: "—" },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "green bean casserole (cover w/ foil)", cookMin: "—" },
+  { time: "4:25 PM", temp: 350, action: "remove", item: "corn casserole (cover w/ foil)", cookMin: "—" },
+  { time: "4:25 PM", temp: "—", action: "increase temp / preheat", item: "to 450", cookMin: "—" },
+  { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30 },
+  { time: "4:55 PM", temp: 450, action: "remove", item: "stuffing/dressing (cover w/ foil)", cookMin: "—" },
+  { time: "4:55 PM", temp: "—", action: "decrease temp / preheat", item: "to 400", cookMin: "—" },
+  { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12 },
+  { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—" },
+  { time: "5:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—" },
+  { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese – em version", cookMin: 30 },
+  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese – em version", cookMin: "—" },
+  { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—" },
+  { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)" },
+  { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—" },
+];
+
+function uuid() { return crypto.randomUUID(); }
+
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const min = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${min}:${String(sec).padStart(2, "0")}`;
+}
+
+function timeStrFromDate(d) {
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "pm" : "am";
+  const hh = ((h + 11) % 12) + 1;
+  return `${hh}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function titleCase(str = "") {
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ""))
+    .join(" ")
+    .replace(/\bW\//g, "w/")
+    .replace(/\bEm\b/g, "Em");
+}
+
+function capFirst(str = "") {
+  if (!str) return str;
+  return str[0].toUpperCase() + str.slice(1);
+}
+
+function parseTimeToMinutes(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  const firstPart = s.split("–")[0].split("-")[0].trim();
+  const m = firstPart.match(/(\d{1,2})\s*:\s*(\d{2})\s*(am|pm)/i);
+  if (!m) return null;
+
+  let hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  const ap = m[3].toLowerCase();
+
+  if (ap === "pm" && hh !== 12) hh += 12;
+  if (ap === "am" && hh === 12) hh = 0;
+
+  return hh * 60 + mm;
+}
+
+let timeline = DEFAULT_TIMELINE.map(r => ({ id: uuid(), ...r }));
+let view = "plan";
+
+let startedAtTs = null;
+let isRunning = false;
+let pausedAtTs = null;
+let pausedAccumMs = 0;
+let tickInterval = null;
+
+const tabPlan = document.getElementById("tab-plan");
+const tabRun  = document.getElementById("tab-run");
+const viewPlan = document.getElementById("view-plan");
+const viewRun  = document.getElementById("view-run");
+const tbody = document.getElementById("timeline-tbody");
+
+const btnAddRow = document.getElementById("btn-add-row");
+const btnResetTemplate = document.getElementById("btn-reset-template");
+const btnStartCook = document.getElementById("btn-start-cook");
+
+const runStartedLabel = document.getElementById("run-started-label");
+const btnRunStart  = document.getElementById("btn-run-start");
+const btnRunPause  = document.getElementById("btn-run-pause");
+const btnRunResume = document.getElementById("btn-run-resume");
+const btnRunReset  = document.getElementById("btn-run-reset");
+
+const noTimers = document.getElementById("no-timers");
+const timersGrid = document.getElementById("timers-grid");
+
+function renderPlan() {
+  tbody.innerHTML = "";
+
+  timeline.forEach((r, idx) => {
+    const tr = document.createElement("tr");
+    tr.className = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
+
+    const tdTime = document.createElement("td");
+    tdTime.className = "p-2";
+    tdTime.innerHTML = `
+      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
+             placeholder="e.g., 3:35 PM"
+             value="${r.time ?? ""}">
+    `;
+    tdTime.querySelector("input").addEventListener("input", (e) => {
+      r.time = e.target.value;
+      rebuildTimers();
+    });
+
+    const tdTemp = document.createElement("td");
+    tdTemp.className = "p-2";
+    const tempOptions = temps.map(t =>
+      `<option value="${t}" ${String(r.temp)===String(t)?"selected":""}>${t==="—"?"—":t+"°F"}</option>`
+    ).join("");
+    tdTemp.innerHTML = `
+      <select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">
+        ${tempOptions}
+      </select>
+    `;
+    tdTemp.querySelector("select").addEventListener("change", (e) => {
+      r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10);
+      rebuildTimers();
+    });
+
+    const tdAction = document.createElement("td");
+    tdAction.className = "p-2";
+    const actionOptions = actions.map(a =>
+      `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`
+    ).join("");
+    tdAction.innerHTML = `
+      <select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">
+        ${actionOptions}
+      </select>
+    `;
+    tdAction.querySelector("select").addEventListener("change", (e) => {
+      r.action = e.target.value;
+      rebuildTimers();
+    });
+
+    const tdItem = document.createElement("td");
+    tdItem.className = "p-2";
+    tdItem.innerHTML = `
+      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
+             placeholder="dish or note"
+             value="${r.item ?? ""}">
+    `;
+    tdItem.querySelector("input").addEventListener("input", (e) => {
+      r.item = e.target.value;
+      rebuildTimers();
+    });
+
+    const tdCook = document.createElement("td");
+    tdCook.className = "p-2";
+    tdCook.innerHTML = `
+      <input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1"
+             placeholder="min or —"
+             value="${r.cookMin ?? ""}">
+    `;
+    tdCook.querySelector("input").addEventListener("input", (e) => {
+      r.cookMin = e.target.value;
+      rebuildTimers();
+    });
+
+    const tdDel = document.createElement("td");
+    tdDel.className = "p-2 text-right";
+    tdDel.innerHTML = `<button class="text-neutral-400 hover:text-red-400" title="delete row">🗑</button>`;
+    tdDel.querySelector("button").addEventListener("click", () => {
+      timeline = timeline.filter(x => x.id !== r.id);
+      renderPlan();
+      rebuildTimers();
+    });
+
+    tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdDel);
+    tbody.appendChild(tr);
+  });
+}
+
+function isTimedPutIn(row) {
+  const hasNumericCook = typeof row.cookMin === "number" || /\d/.test(String(row.cookMin));
+  return row.action === "put in" && hasNumericCook && parseTimeToMinutes(row.time) != null;
+}
+
+let timerItems = [];
+let anchorMin = null;
+
+function rebuildTimers() {
+  const parseableTimes = timeline
+    .map(r => parseTimeToMinutes(r.time))
+    .filter(v => v != null);
+
+  if (!parseableTimes.length) {
+    timerItems = [];
+    anchorMin = null;
+    renderRun();
+    return;
+  }
+
+  anchorMin = Math.min(...parseableTimes);
+
+  timerItems = timeline
+    .filter(isTimedPutIn)
+    .map(r => {
+      const plannedMin = parseTimeToMinutes(r.time);
+      const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
+      const inOffsetMin = plannedMin - anchorMin;
+      const doneOffsetMin = inOffsetMin + dur;
+      return {
+        id: r.id,
+        item: r.item,
+        temp: r.temp,
+        plannedTime: r.time,
+        cookMin: dur,
+        inOffsetMs: inOffsetMin * 60 * 1000,
+        doneOffsetMs: doneOffsetMin * 60 * 1000,
+      };
+    })
+    .sort((a,b) => a.inOffsetMs - b.inOffsetMs);
+
+  renderRun();
+}
+
+function elapsedMs() {
+  if (!startedAtTs) return 0;
+  const effectiveNow = isRunning ? Date.now() : (pausedAtTs || Date.now());
+  return Math.max(0, effectiveNow - startedAtTs - pausedAccumMs);
+}
+
+function renderRun() {
+  btnRunReset.classList.toggle("hidden", !startedAtTs);
+  btnRunPause.classList.toggle("hidden", !(startedAtTs && isRunning));
+  btnRunResume.classList.toggle("hidden", !(startedAtTs && !isRunning));
+  btnRunStart.classList.toggle("hidden", !!startedAtTs);
+
+  runStartedLabel.textContent = startedAtTs
+    ? `Started ${timeStrFromDate(new Date(startedAtTs))} (anchor = first planned time)`
+    : "Not started";
+
+  timersGrid.innerHTML = "";
+
+  if (!timerItems.length) {
+    noTimers.classList.remove("hidden");
+    return;
+  } else {
+    noTimers.classList.add("hidden");
+  }
+
+  const eMs = elapsedMs();
+
+  timerItems.forEach(it => {
+    const untilOvenMs = it.inOffsetMs - eMs;
+    const untilDoneMs = it.doneOffsetMs - eMs;
+
+    const inOven = untilOvenMs <= 0 && untilDoneMs > 0;
+    const overdue = untilDoneMs <= 0;
+
+    const statusClass = overdue
+      ? "bg-rose-500/20 text-rose-200 border border-rose-500/40"
+      : inOven
+      ? "bg-amber-500/20 text-amber-200 border border-amber-500/40"
+      : "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
+
+    const statusText = overdue
+      ? "should be done"
+      : inOven
+      ? "in oven now"
+      : "waiting to go in";
+
+    const card = document.createElement("div");
+    card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
+
+    card.innerHTML = `
+      <div class="space-y-0.5">
+        <div class="text-lg font-semibold">${titleCase(it.item || "(Unnamed Dish)")}</div>
+        <div class="text-xs text-neutral-400">
+          Planned in: ${it.plannedTime} • ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
+        <div class="text-xs text-neutral-400">time until oven</div>
+        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdown(untilOvenMs)}</div>
+      </div>
+
+      <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
+        <div class="text-xs text-neutral-400">time until done</div>
+        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdown(untilDoneMs)}</div>
+      </div>
+
+      <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">
+        ${statusText}
+      </div>
+    `;
+
+    timersGrid.appendChild(card);
+  });
+}
+
+function startRun() {
+  startedAtTs = Date.now();
+  isRunning = true;
+  pausedAtTs = null;
+  pausedAccumMs = 0;
+  setView("run");
+  startTicking();
+  renderRun();
+}
+
+function pauseRun() {
+  if (!isRunning) return;
+  isRunning = false;
+  pausedAtTs = Date.now();
+  stopTicking();
+  renderRun();
+}
+
+function resumeRun() {
+  if (!startedAtTs) return startRun();
+  if (pausedAtTs) {
+    pausedAccumMs += (Date.now() - pausedAtTs);
+    pausedAtTs = null;
+  }
+  isRunning = true;
+  startTicking();
+  renderRun();
+}
+
+function resetRun() {
+  stopTicking();
+  startedAtTs = null;
+  isRunning = false;
+  pausedAtTs = null;
+  pausedAccumMs = 0;
+  renderRun();
+}
+
+function startTicking() {
+  stopTicking();
+  tickInterval = setInterval(renderRun, 500);
+}
+function stopTicking() {
+  if (tickInterval) clearInterval(tickInterval);
+  tickInterval = null;
+}
+
+function setView(next) {
+  view = next;
+  const isPlan = view === "plan";
+  viewPlan.classList.toggle("hidden", !isPlan);
+  viewRun.classList.toggle("hidden", isPlan);
+
+  tabPlan.className = isPlan
+    ? "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white"
+    : "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
+  tabRun.className = !isPlan
+    ? "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white"
+    : "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
+
+  if (!isPlan) renderRun();
+}
+
+tabPlan.addEventListener("click", () => setView("plan"));
+tabRun.addEventListener("click", () => setView("run"));
+
+btnAddRow.addEventListener("click", () => {
+  timeline.push({ id: uuid(), time: "", temp: 350, action: "put in", item: "", cookMin: 10 });
+  renderPlan();
+  rebuildTimers();
+});
+
+btnResetTemplate.addEventListener("click", () => {
+  timeline = DEFAULT_TIMELINE.map(r => ({ id: uuid(), ...r }));
+  resetRun();
+  renderPlan();
+  rebuildTimers();
+});
+
+btnStartCook.addEventListener("click", startRun);
+
+btnRunStart.addEventListener("click", startRun);
+btnRunPause.addEventListener("click", pauseRun);
+btnRunResume.addEventListener("click", resumeRun);
+btnRunReset.addEventListener("click", resetRun);
+
+renderPlan();
+rebuildTimers();
+setView("plan");
+</script>
+</body>
+</html>
