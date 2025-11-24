@@ -157,19 +157,16 @@
 ----------------------------*/
 const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
 
+/* ONLY status change here */
 const actions = [
   "set oven temp",
   "put in",
-  "remove",
   "flex / oven off",
-  "optional reheat window",
-  "reheat if desired (covered)",
+  "reheat window",
   "serve",
 ];
 
-/* DEFAULT TIMELINE
-   - removed all placeholder "remove" rows
-*/
+/* DEFAULT TIMELINE unchanged except reheat statuses collapsed */
 const DEFAULT_TIMELINE = [
   { time: "1:00 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
@@ -188,8 +185,8 @@ const DEFAULT_TIMELINE = [
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
   { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
-  { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
-  { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
+  { time: "5:45 PM", temp: "—", action: "reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
+  { time: "5:45–6:00 PM", temp: 400, action: "reheat window", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
 ];
 
@@ -274,7 +271,7 @@ let pausedAtTs = null;
 let pausedAccumMs = 0;
 let tickInterval = null;
 
-let prepTasks = []; // {id, person, task, done, sourceRowId?}
+let prepTasks = [];
 
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
@@ -455,10 +452,9 @@ function renderPlan() {
       r.time = e.target.value;
       rebuildTimers();
       saveState(true);
-      // no re-render here (fixes 1-char-at-a-time bug)
     });
     timeInput.addEventListener("blur", () => {
-      renderPlan(); // refresh derived "Take Out" after typing
+      renderPlan();
       saveState(true);
     });
 
@@ -478,7 +474,7 @@ function renderPlan() {
     tdAction.querySelector("select").addEventListener("change", (e) => {
       r.action = e.target.value;
       rebuildTimers(); seedPrepTasks(false); saveState(true);
-      renderPlan(); // ok to re-render on discrete change
+      renderPlan();
     });
 
     const tdItem = document.createElement("td");
@@ -496,10 +492,9 @@ function renderPlan() {
     cookInput.addEventListener("input", (e) => {
       r.cookMin = e.target.value;
       rebuildTimers(); saveState(true);
-      // no re-render here (so typing is smooth)
     });
     cookInput.addEventListener("blur", () => {
-      renderPlan(); // refresh derived "Take Out"
+      renderPlan();
       saveState(true);
     });
 
@@ -674,10 +669,9 @@ function renderRun(){
       ${tempChangeItems.map(tc=>{
         const rem = tc.offsetMs - eMs;
         const due = rem<=0;
-        const label = "Set temp";
         const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : (tc.item||"—");
         return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-          <div><div class="text-sm font-medium">${label} → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
+          <div><div class="text-sm font-medium">Set temp → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
           <div class="text-sm font-semibold ${due?"text-amber-300":"text-neutral-100"}">${due?"NOW":fmtCountdownHours(rem)}</div>
         </div>`;
       }).join("")}
