@@ -176,8 +176,8 @@ const DEFAULT_TIMELINE = [
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
   { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—", person: "" },
   { time: "5:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—", person: "" },
-  { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
-  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese", cookMin: "—", person: "" },
+  { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese – em version", cookMin: 30, person: "" },
+  { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese – em version", cookMin: "—", person: "" },
   { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
   { time: "5:45–6:00 PM", temp: 400, action: "reheat if desired (covered)", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
@@ -210,7 +210,16 @@ function titleCase(str = "") {
 function normalizePerson(str = "") {
   const trimmed = String(str || "").trim();
   if (!trimmed) return "";
-  return titleCase(trimmed);
+  return trimmed
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function safeId(str = "") {
+  return String(str || "").replace(/[^a-z0-9_-]/gi, "_");
 }
 
 function capFirst(str = "") {
@@ -329,11 +338,19 @@ function renderPlan() {
     const tdPerson = document.createElement("td");
     tdPerson.className = "p-2";
     tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${r.person ?? ""}">`;
-    tdPerson.querySelector("input").addEventListener("input", (e) => {
-      r.person = normalizePerson(e.target.value);
-      e.target.value = r.person; // keep UI normalized
+    const personInput = tdPerson.querySelector("input");
+    // Let user type freely; normalize on blur so we don't fight the cursor.
+    personInput.addEventListener("input", (e) => {
+      r.person = e.target.value; // raw while typing
       rebuildTimers();
       seedPrepTasks(false);
+    });
+    personInput.addEventListener("blur", (e) => {
+      r.person = normalizePerson(e.target.value);
+      e.target.value = r.person;
+      rebuildTimers();
+      seedPrepTasks(true);
+      renderPlan(); // re-render to show normalized value across rows
     });
 
     const tdDel = document.createElement("td");
@@ -582,11 +599,11 @@ function renderPrep(){
         <div class="text-lg font-semibold">${titleCase(person)}</div>
         <div class="text-xs text-neutral-400">${doneCount}/${tasks.length} done</div>
       </div>
-      <div class="space-y-1" id="prep-list-${person}"></div>
+      <div class="space-y-1" id="prep-list-${safeId(person)}"></div>
     `;
     prepContainer.appendChild(card);
 
-    const list = card.querySelector(`#prep-list-${CSS.escape(person)}`);
+    const list = card.querySelector(`#prep-list-${safeId(person)}`);
     tasks.forEach(t => {
       const row = document.createElement("label");
       row.className = "flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 cursor-pointer";
