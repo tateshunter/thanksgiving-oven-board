@@ -22,11 +22,16 @@
         <p class="text-neutral-400 text-sm md:text-base">Plan, prep, run, and watch the whole crew in one place.</p>
       </div>
 
-      <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm flex-wrap">
-        <button id="tab-plan" class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">Plan</button>
-        <button id="tab-prep" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Prep Board</button>
-        <button id="tab-run"  class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Oven Timers</button>
-        <button id="tab-dash" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Dashboard</button>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button id="btn-save" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">💾 Save</button>
+        <button id="btn-clear-all" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-red-900/40 hover:border-red-700 transition">🧨 Clear all data</button>
+
+        <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm flex-wrap">
+          <button id="tab-plan" class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">Plan</button>
+          <button id="tab-prep" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Prep Board</button>
+          <button id="tab-run"  class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Oven Timers</button>
+          <button id="tab-dash" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Dashboard</button>
+        </div>
       </div>
     </header>
 
@@ -75,7 +80,7 @@
           <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
           <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
           <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">Add prep task</button>
-        </div>
+      </div>
 
         <div id="prep-container" class="space-y-3"></div>
       </div>
@@ -258,6 +263,66 @@ let tickInterval = null;
 let prepTasks = []; // {id, person, task, done, sourceRowId?}
 
 /* ---------------------------
+   PERSISTENCE (localStorage)
+----------------------------*/
+const STORAGE_KEY = "thanksgiving-oven-board:v2";
+
+function saveState(silent=false) {
+  try {
+    const payload = {
+      timeline,
+      prepTasks,
+      startedAtTs,
+      isRunning,
+      pausedAtTs,
+      pausedAccumMs,
+      view,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    if(!silent) flashSaved();
+  } catch (err) {
+    console.warn("Save failed:", err);
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+
+    if (Array.isArray(data.timeline)) timeline = data.timeline;
+    if (Array.isArray(data.prepTasks)) prepTasks = data.prepTasks;
+
+    startedAtTs = data.startedAtTs ?? null;
+    isRunning = data.isRunning ?? false;
+    pausedAtTs = data.pausedAtTs ?? null;
+    pausedAccumMs = data.pausedAccumMs ?? 0;
+    view = data.view ?? "plan";
+
+    return true;
+  } catch (err) {
+    console.warn("Load failed:", err);
+    return false;
+  }
+}
+
+function clearState() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function flashSaved() {
+  const btn = document.getElementById("btn-save");
+  if (!btn) return;
+  const old = btn.textContent;
+  btn.textContent = "✅ Saved";
+  setTimeout(() => (btn.textContent = old), 900);
+}
+
+window.addEventListener("beforeunload", () => saveState(true));
+
+/* ---------------------------
    DOM REFS
 ----------------------------*/
 const tabPlan = document.getElementById("tab-plan");
@@ -299,6 +364,9 @@ const dashBars = document.getElementById("dash-bars");
 const dashByPerson = document.getElementById("dash-by-person");
 const btnDashRefresh = document.getElementById("btn-dash-refresh");
 
+const btnSave = document.getElementById("btn-save");
+const btnClearAll = document.getElementById("btn-clear-all");
+
 /* ---------------------------
    PLAN TABLE
 ----------------------------*/
@@ -311,46 +379,47 @@ function renderPlan() {
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
     tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${r.time ?? ""}">`;
-    tdTime.querySelector("input").addEventListener("input", (e) => { r.time = e.target.value; rebuildTimers(); });
+    tdTime.querySelector("input").addEventListener("input", (e) => { r.time = e.target.value; rebuildTimers(); saveState(true); });
 
     const tdTemp = document.createElement("td");
     tdTemp.className = "p-2";
     const tempOptions = temps.map(t => `<option value="${t}" ${String(r.temp)===String(t)?"selected":""}>${t==="—"?"—":t+"°F"}</option>`).join("");
     tdTemp.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${tempOptions}</select>`;
-    tdTemp.querySelector("select").addEventListener("change", (e) => { r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10); rebuildTimers(); });
+    tdTemp.querySelector("select").addEventListener("change", (e) => { r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10); rebuildTimers(); saveState(true); });
 
     const tdAction = document.createElement("td");
     tdAction.className = "p-2";
     const actionOptions = actions.map(a => `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`).join("");
     tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
-    tdAction.querySelector("select").addEventListener("change", (e) => { r.action = e.target.value; rebuildTimers(); seedPrepTasks(false); });
+    tdAction.querySelector("select").addEventListener("change", (e) => { r.action = e.target.value; rebuildTimers(); seedPrepTasks(false); saveState(true); });
 
     const tdItem = document.createElement("td");
     tdItem.className = "p-2";
     tdItem.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="dish or note" value="${r.item ?? ""}">`;
-    tdItem.querySelector("input").addEventListener("input", (e) => { r.item = e.target.value; rebuildTimers(); seedPrepTasks(false); });
+    tdItem.querySelector("input").addEventListener("input", (e) => { r.item = e.target.value; rebuildTimers(); seedPrepTasks(false); saveState(true); });
 
     const tdCook = document.createElement("td");
     tdCook.className = "p-2";
     tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${r.cookMin ?? ""}">`;
-    tdCook.querySelector("input").addEventListener("input", (e) => { r.cookMin = e.target.value; rebuildTimers(); });
+    tdCook.querySelector("input").addEventListener("input", (e) => { r.cookMin = e.target.value; rebuildTimers(); saveState(true); });
 
     const tdPerson = document.createElement("td");
     tdPerson.className = "p-2";
     tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${r.person ?? ""}">`;
     const personInput = tdPerson.querySelector("input");
-    // Let user type freely; normalize on blur so we don't fight the cursor.
+
     personInput.addEventListener("input", (e) => {
-      r.person = e.target.value; // raw while typing
-      rebuildTimers();
+      r.person = e.target.value;
       seedPrepTasks(false);
+      saveState(true);
     });
     personInput.addEventListener("blur", (e) => {
       r.person = normalizePerson(e.target.value);
       e.target.value = r.person;
       rebuildTimers();
       seedPrepTasks(true);
-      renderPlan(); // re-render to show normalized value across rows
+      renderPlan();
+      saveState(true);
     });
 
     const tdDel = document.createElement("td");
@@ -359,7 +428,7 @@ function renderPlan() {
     tdDel.querySelector("button").addEventListener("click", () => {
       timeline = timeline.filter(x => x.id !== r.id);
       prepTasks = prepTasks.filter(t => t.sourceRowId !== r.id);
-      renderPlan(); rebuildTimers(); renderPrep(); renderDash();
+      renderPlan(); rebuildTimers(); renderPrep(); renderDash(); saveState(true);
     });
 
     tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdPerson, tdDel);
@@ -400,8 +469,10 @@ function rebuildTimers() {
     const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
     const inOffsetMin = plannedMin - anchorMin;
     const doneOffsetMin = inOffsetMin + dur;
-    return { id:r.id, item:r.item, person:r.person, temp:r.temp, plannedTime:r.time, cookMin:dur,
-      inOffsetMs: inOffsetMin*60000, doneOffsetMs: doneOffsetMin*60000 };
+    return {
+      id:r.id, item:r.item, person:r.person, temp:r.temp, plannedTime:r.time, cookMin:dur,
+      inOffsetMs: inOffsetMin*60000, doneOffsetMs: doneOffsetMin*60000
+    };
   }).sort((a,b)=>a.inOffsetMs-b.inOffsetMs);
 
   finalDoneOffsetMs = timerItems.length ? Math.max(...timerItems.map(t=>t.doneOffsetMs)) : null;
@@ -516,10 +587,10 @@ function renderRun(){
   });
 }
 
-function startRun(){ startedAtTs=Date.now(); isRunning=true; pausedAtTs=null; pausedAccumMs=0; setView("run"); startTicking(); renderRun(); renderDash(); }
-function pauseRun(){ if(!isRunning) return; isRunning=false; pausedAtTs=Date.now(); stopTicking(); renderRun(); renderDash(); }
-function resumeRun(){ if(!startedAtTs) return startRun(); if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; } isRunning=true; startTicking(); renderRun(); renderDash(); }
-function resetRun(){ stopTicking(); startedAtTs=null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; renderRun(); renderDash(); }
+function startRun(){ startedAtTs=Date.now(); isRunning=true; pausedAtTs=null; pausedAccumMs=0; setView("run"); startTicking(); renderRun(); renderDash(); saveState(true); }
+function pauseRun(){ if(!isRunning) return; isRunning=false; pausedAtTs=Date.now(); stopTicking(); renderRun(); renderDash(); saveState(true); }
+function resumeRun(){ if(!startedAtTs) return startRun(); if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; } isRunning=true; startTicking(); renderRun(); renderDash(); saveState(true); }
+function resetRun(){ stopTicking(); startedAtTs=null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; renderRun(); renderDash(); saveState(true); }
 function startTicking(){ stopTicking(); tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500); }
 function stopTicking(){ if(tickInterval) clearInterval(tickInterval); tickInterval=null; }
 
@@ -536,8 +607,6 @@ function seedPrepTasks(force=true){
 
   rowsWithItems.forEach(r => {
     const personName = normalizePerson(r.person);
-
-    // no auto “Unassigned”: if no person, skip seeding
     if (!personName) return;
 
     const exists = prepTasks.some(t => t.sourceRowId === r.id);
@@ -558,6 +627,7 @@ function seedPrepTasks(force=true){
 
   renderPrep();
   renderDash();
+  saveState(true);
 }
 
 function addPrepTask(person, task){
@@ -569,7 +639,7 @@ function addPrepTask(person, task){
   prepTasks.push({ id: uuid(), person: p, task: t, done:false });
 
   prepPersonInput.value=""; prepTaskInput.value="";
-  renderPrep(); renderDash();
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function renderPrep(){
@@ -612,8 +682,8 @@ function renderPrep(){
         <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${t.task}</span>
         <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete">delete</button>
       `;
-      row.querySelector("input").addEventListener("change", (e)=>{ t.done=e.target.checked; renderPrep(); renderDash(); });
-      row.querySelector("button").addEventListener("click", (e)=>{ e.preventDefault(); prepTasks = prepTasks.filter(x=>x.id!==t.id); renderPrep(); renderDash(); });
+      row.querySelector("input").addEventListener("change", (e)=>{ t.done=e.target.checked; renderPrep(); renderDash(); saveState(true); });
+      row.querySelector("button").addEventListener("click", (e)=>{ e.preventDefault(); prepTasks = prepTasks.filter(x=>x.id!==t.id); renderPrep(); renderDash(); saveState(true); });
       list.appendChild(row);
     });
   });
@@ -761,6 +831,8 @@ function setView(next){
   if(view==="prep") renderPrep();
   if(view==="run") renderRun();
   if(view==="dash") renderDash();
+
+  saveState(true);
 }
 
 /* ---------------------------
@@ -773,24 +845,35 @@ tabDash.addEventListener("click",()=>setView("dash"));
 
 btnAddRow.addEventListener("click",()=>{
   timeline.push({id:uuid(),time:"",temp:350,action:"put in",item:"",cookMin:10,person:""});
-  renderPlan(); rebuildTimers(); seedPrepTasks(false);
+  renderPlan(); rebuildTimers(); seedPrepTasks(false); saveState();
 });
 btnResetTemplate.addEventListener("click",()=>{
   timeline=DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
   prepTasks = prepTasks.filter(t=>!t.sourceRowId);
-  resetRun(); renderPlan(); rebuildTimers(); seedPrepTasks(true);
+  resetRun(); renderPlan(); rebuildTimers(); seedPrepTasks(true); saveState();
 });
 btnStartCook.addEventListener("click",startRun);
 
-btnRunStart.addEventListener("click",startRun);
-btnRunPause.addEventListener("click",pauseRun);
-btnRunResume.addEventListener("click",resumeRun);
-btnRunReset.addEventListener("click",resetRun);
+btnRunStart.addEventListener("click", startRun);
+btnRunPause.addEventListener("click", pauseRun);
+btnRunResume.addEventListener("click", resumeRun);
+btnRunReset.addEventListener("click", resetRun);
 
 btnPrepAdd.addEventListener("click",()=>addPrepTask(prepPersonInput.value, prepTaskInput.value));
 btnPrepSeed.addEventListener("click",()=>seedPrepTasks(true));
 
 btnDashRefresh.addEventListener("click",()=>renderDash());
+
+btnSave.addEventListener("click",()=>saveState());
+btnClearAll.addEventListener("click",()=>{
+  if(!confirm("Clear everything and reset to template?")) return;
+  clearState();
+  timeline = DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
+  prepTasks = [];
+  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0;
+  stopTicking();
+  renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
+});
 
 /* ---------------------------
    MINI TESTS (console)
@@ -807,10 +890,17 @@ btnDashRefresh.addEventListener("click",()=>renderDash());
 /* ---------------------------
    INIT
 ----------------------------*/
+loadState();
 renderPlan();
 rebuildTimers();
 seedPrepTasks(true);
-setView("plan");
+setView(view || "plan");
+
+// AUTO-RESUME if timers were running
+if(startedAtTs && isRunning){
+  startTicking();
+  setView("run");
+}
 </script>
 </body>
 </html>
