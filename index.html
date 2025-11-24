@@ -185,9 +185,12 @@ const DEFAULT_TIMELINE = [
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
   { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
-  { time: "5:45 PM", temp: "—", action: "reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
-  { time: "5:45–6:00 PM", temp: 400, action: "reheat window", item: "casseroles and/or asparagus and/or rolls", cookMin: "10–15 min (reheat)", person: "" },
+
+  // new simple reheat window at 350 for 15 minutes
+  { time: "5:45 PM", temp: 350, action: "reheat window", item: "final reheat window (covered)", cookMin: 15, person: "" },
+
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
+
 ];
 
 function uuid() { return crypto.randomUUID(); }
