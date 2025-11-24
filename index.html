@@ -10,6 +10,8 @@
     html, body { height: 100%; }
     .bar { height: 10px; border-radius: 999px; background: #1f2937; overflow: hidden; }
     .bar > div { height: 100%; background: #76ba43; }
+    .derived-cell { color: #cbd5e1; font-weight: 600; }
+    .derived-muted { color: #6b7280; }
   </style>
 </head>
 <body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
@@ -47,7 +49,7 @@
       </div>
 
       <div class="overflow-x-auto rounded-2xl border border-neutral-800 shadow-sm">
-        <table class="min-w-[1000px] w-full text-sm">
+        <table class="min-w-[1100px] w-full text-sm">
           <thead class="bg-neutral-900 text-neutral-200">
             <tr>
               <th class="text-left p-3 w-[140px]">Time</th>
@@ -55,6 +57,7 @@
               <th class="text-left p-3 w-[200px]">Action</th>
               <th class="text-left p-3">Item</th>
               <th class="text-left p-3 w-[150px]">Cook Time</th>
+              <th class="text-left p-3 w-[140px]">Take Out</th>
               <th class="text-left p-3 w-[160px]">Person</th>
               <th class="p-3 w-[56px]"></th>
             </tr>
@@ -144,12 +147,14 @@
    DATA + HELPERS
 ----------------------------*/
 const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
+
+// Simplified actions:
+// - removed preheat/increase/decrease
+// - replaced with single “set oven temp”
 const actions = [
-  "preheat oven",
+  "set oven temp",
   "put in",
   "remove",
-  "increase temp / preheat",
-  "decrease temp / preheat",
   "flex / oven off",
   "optional reheat window",
   "reheat if desired (covered)",
@@ -157,30 +162,30 @@ const actions = [
 ];
 
 const DEFAULT_TIMELINE = [
-  { time: "1:00 PM", temp: "—", action: "preheat oven", item: "to 350", cookMin: "—", person: "" },
+  { time: "1:00 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
   { time: "1:35 PM", temp: 350, action: "remove", item: "coca cola cake", cookMin: "—", person: "" },
-  { time: "1:35 PM", temp: "—", action: "increase temp / preheat", item: "to 375", cookMin: "—", person: "" },
+  { time: "1:35 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
   { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15, person: "" },
   { time: "2:00 PM", temp: 375, action: "remove", item: "pb sheet cake", cookMin: "—", person: "" },
   { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
-  { time: "2:45 PM", temp: "—", action: "preheat oven", item: "to 375", cookMin: "—", person: "" },
+  { time: "2:45 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
   { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10, person: "" },
   { time: "3:10 PM", temp: 375, action: "remove", item: "rolls (wrap in foil/towel)", cookMin: "—", person: "" },
-  { time: "3:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—", person: "" },
+  { time: "3:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50, person: "" },
   { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple casserole", cookMin: 30, person: "" },
   { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20, person: "" },
   { time: "4:25 PM", temp: 350, action: "remove", item: "pineapple casserole (cover w/ foil)", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: 350, action: "remove", item: "green bean casserole (cover w/ foil)", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: 350, action: "remove", item: "corn casserole (cover w/ foil)", cookMin: "—", person: "" },
-  { time: "4:25 PM", temp: "—", action: "increase temp / preheat", item: "to 450", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: "—", action: "set oven temp", item: "to 450", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30, person: "" },
   { time: "4:55 PM", temp: 450, action: "remove", item: "stuffing/dressing (cover w/ foil)", cookMin: "—", person: "" },
-  { time: "4:55 PM", temp: "—", action: "decrease temp / preheat", item: "to 400", cookMin: "—", person: "" },
+  { time: "4:55 PM", temp: "—", action: "set oven temp", item: "to 400", cookMin: "—", person: "" },
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
   { time: "5:10 PM", temp: 400, action: "remove", item: "bacon wrapped asparagus", cookMin: "—", person: "" },
-  { time: "5:10 PM", temp: "—", action: "decrease temp / preheat", item: "to 350", cookMin: "—", person: "" },
+  { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
   { time: "5:45 PM", temp: 350, action: "remove", item: "mac and cheese", cookMin: "—", person: "" },
   { time: "5:45 PM", temp: "—", action: "optional reheat window", item: "bring oven to 400", cookMin: "—", person: "" },
@@ -206,12 +211,22 @@ function timeStrFromDate(d) {
   return `${hh}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+// NEW: format minutes-since-midnight into "h:mm am/pm"
+function timeStrFromMinutes(totalMin) {
+  if (totalMin == null) return "—";
+  totalMin = ((totalMin % 1440) + 1440) % 1440;
+  let hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  const ampm = hh >= 12 ? "pm" : "am";
+  const h12 = ((hh + 11) % 12) + 1;
+  return `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
+}
+
 function titleCase(str = "") {
   return str.toLowerCase().trim().split(/ +/).filter(Boolean)
     .map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
 
-// Normalize person names so "emily", "Emily ", "EMILY" group together.
 function normalizePerson(str = "") {
   const trimmed = String(str || "").trim();
   if (!trimmed) return "";
@@ -259,7 +274,6 @@ let pausedAtTs = null;
 let pausedAccumMs = 0;
 let tickInterval = null;
 
-// Prep tasks (manual + seeded)
 let prepTasks = []; // {id, person, task, done, sourceRowId?}
 
 /* ---------------------------
@@ -370,6 +384,19 @@ const btnClearAll = document.getElementById("btn-clear-all");
 /* ---------------------------
    PLAN TABLE
 ----------------------------*/
+
+// NEW: derived take-out string for “put in” rows
+function derivedTakeOutForRow(r) {
+  const plannedMin = parseTimeToMinutes(r.time);
+  if (plannedMin == null) return null;
+  if (r.action !== "put in") return null;
+
+  const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
+  if (!Number.isFinite(dur)) return null;
+
+  return timeStrFromMinutes(plannedMin + dur);
+}
+
 function renderPlan() {
   tbody.innerHTML = "";
   timeline.forEach((r, idx) => {
@@ -379,7 +406,7 @@ function renderPlan() {
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
     tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${r.time ?? ""}">`;
-    tdTime.querySelector("input").addEventListener("input", (e) => { r.time = e.target.value; rebuildTimers(); saveState(true); });
+    tdTime.querySelector("input").addEventListener("input", (e) => { r.time = e.target.value; rebuildTimers(); saveState(true); renderPlan(); });
 
     const tdTemp = document.createElement("td");
     tdTemp.className = "p-2";
@@ -391,7 +418,7 @@ function renderPlan() {
     tdAction.className = "p-2";
     const actionOptions = actions.map(a => `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`).join("");
     tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
-    tdAction.querySelector("select").addEventListener("change", (e) => { r.action = e.target.value; rebuildTimers(); seedPrepTasks(false); saveState(true); });
+    tdAction.querySelector("select").addEventListener("change", (e) => { r.action = e.target.value; rebuildTimers(); seedPrepTasks(false); saveState(true); renderPlan(); });
 
     const tdItem = document.createElement("td");
     tdItem.className = "p-2";
@@ -401,7 +428,15 @@ function renderPlan() {
     const tdCook = document.createElement("td");
     tdCook.className = "p-2";
     tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${r.cookMin ?? ""}">`;
-    tdCook.querySelector("input").addEventListener("input", (e) => { r.cookMin = e.target.value; rebuildTimers(); saveState(true); });
+    tdCook.querySelector("input").addEventListener("input", (e) => { r.cookMin = e.target.value; rebuildTimers(); saveState(true); renderPlan(); });
+
+    // NEW derived Take-Out column
+    const tdTakeOut = document.createElement("td");
+    tdTakeOut.className = "p-2";
+    const takeOutStr = derivedTakeOutForRow(r);
+    tdTakeOut.innerHTML = takeOutStr
+      ? `<div class="derived-cell">${takeOutStr}</div>`
+      : `<div class="derived-muted">—</div>`;
 
     const tdPerson = document.createElement("td");
     tdPerson.className = "p-2";
@@ -431,7 +466,7 @@ function renderPlan() {
       renderPlan(); rebuildTimers(); renderPrep(); renderDash(); saveState(true);
     });
 
-    tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdPerson, tdDel);
+    tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdTakeOut, tdPerson, tdDel);
     tbody.appendChild(tr);
   });
 }
@@ -439,7 +474,9 @@ function renderPlan() {
 /* ---------------------------
    TIMERS / RUN VIEW
 ----------------------------*/
-const TEMP_CHANGE_ACTIONS = new Set(["preheat oven","increase temp / preheat","decrease temp / preheat"]);
+
+// Simplified temp change logic
+const TEMP_CHANGE_ACTIONS = new Set(["set oven temp"]);
 
 function isTimedPutIn(row) {
   const hasNumericCook = typeof row.cookMin === "number" || /[0-9]/.test(String(row.cookMin));
@@ -539,7 +576,7 @@ function renderRun(){
       ${tempChangeItems.map(tc=>{
         const rem = tc.offsetMs - eMs;
         const due = rem<=0;
-        const label = tc.action==="preheat oven"?"Preheat":"Change temp";
+        const label = "Set temp";
         const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : (tc.item||"—");
         return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
           <div><div class="text-sm font-medium">${label} → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
@@ -601,7 +638,6 @@ function seedPrepTasks(force=true){
   const rowsWithItems = timeline.filter(r => r.item && String(r.item).trim() && r.action !== "flex / oven off");
 
   if (force) {
-    // keep only manual tasks (no sourceRowId)
     prepTasks = prepTasks.filter(t => !t.sourceRowId);
   }
 
@@ -635,7 +671,6 @@ function addPrepTask(person, task){
   const t = String(task || "").trim();
   if(!t) return;
 
-  // allow adding without a person, but it won't display until a person is set
   prepTasks.push({ id: uuid(), person: p, task: t, done:false });
 
   prepPersonInput.value=""; prepTaskInput.value="";
@@ -885,6 +920,7 @@ btnClearAll.addEventListener("click",()=>{
   console.assert(fmtCountdownHours(0) === "0:00:00", "fmtCountdownHours zero");
   console.assert(fmtCountdownHours(3661000) === "1:01:01", "fmtCountdownHours 1:01:01");
   console.assert(normalizePerson(" emily  ") === "Emily", "normalizePerson trims + cases");
+  console.assert(timeStrFromMinutes(13*60) === "1:00 pm", "timeStrFromMinutes 1pm");
 })();
 
 /* ---------------------------
