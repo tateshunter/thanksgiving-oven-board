@@ -26,6 +26,20 @@
     #dash-bars button[data-scrub-id]{
       touch-action: manipulation;
     }
+
+    /* ring progress */
+    .ring-wrap { width: 96px; height: 96px; }
+    .ring-svg { transform: rotate(-90deg); }
+    .ring-bg { stroke: #1f2937; }
+    .ring-fg { transition: stroke-dashoffset .35s ease; stroke-linecap: round; }
+    .ring-text { font-variant-numeric: tabular-nums; }
+    @media (min-width: 768px){
+      .ring-wrap { width: 110px; height: 110px; }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .alarm-tile { animation: none; }
+      .ring-fg { transition: none; }
+    }
   </style>
 </head>
 <body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
@@ -179,6 +193,9 @@ Set table"></textarea>
 
         <div id="dash-bars" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-4"></div>
 
+        <!-- RANDOM TASK SELECTOR -->
+        <div id="dash-random-task" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
+
         <div id="dash-by-person" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
       </div>
     </section>
@@ -197,7 +214,7 @@ Set table"></textarea>
         </div>
         <button id="global-alarm-close"
                 class="text-neutral-400 hover:text-white text-xl leading-none"
-                title="close">✕</button>
+                title="close" aria-label="close overlay">✕</button>
       </div>
 
       <div id="global-alarm-list" class="space-y-2"></div>
@@ -246,7 +263,19 @@ const DEFAULT_TIMELINE = [
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
 ];
 
-function uuid() { return crypto.randomUUID(); }
+function uuid() {
+  return (crypto?.randomUUID?.() || 
+    "id-"+Math.random().toString(36).slice(2)+Date.now().toString(36));
+}
+
+function esc(s=""){
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
+}
 
 function fmtCountdownHours(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -262,6 +291,43 @@ function fmtCountdownShort(ms){
   const sec = s%60;
   if(m >= 60) return fmtCountdownHours(ms);
   return `${m}m ${String(sec).padStart(2,"0")}s`;
+}
+
+function ringProgressHtml({
+  title = "",
+  remainingMs = 0,
+  totalMs = 1,
+  colorClass = "text-emerald-400",
+  overdue = false,
+  bigText = "",
+  subText = ""
+}){
+  totalMs = Math.max(1, totalMs);
+  const rem = remainingMs;
+  const pct = Math.max(0, Math.min(1, 1 - rem / totalMs));
+  const radius = 40;
+  const circ = 2 * Math.PI * radius;
+  const dash = circ * pct;
+  const dashOffset = circ - dash;
+
+  const fgStroke = overdue ? "stroke-rose-400" : colorClass.replace("text-","stroke-");
+  const glow = overdue ? "drop-shadow(0 0 6px rgba(244,63,94,.6))" : "drop-shadow(0 0 4px rgba(118,186,67,.45))";
+
+  return `
+    <div class="ring-wrap shrink-0 flex flex-col items-center justify-center">
+      <div class="text-[10px] uppercase tracking-widest text-neutral-500 mb-1 text-center">${esc(title)}</div>
+      <svg class="ring-svg ring-svg w-full h-full" viewBox="0 0 100 100" style="filter:${glow}">
+        <circle class="ring-bg" cx="50" cy="50" r="${radius}" fill="none" stroke-width="10" />
+        <circle class="ring-fg ${fgStroke}" cx="50" cy="50" r="${radius}" fill="none" stroke-width="10"
+          stroke-dasharray="${circ}"
+          stroke-dashoffset="${dashOffset}" />
+      </svg>
+      <div class="ring-text -mt-[78px] text-center pointer-events-none">
+        <div class="text-sm font-semibold ${overdue?"text-rose-200":"text-neutral-100"}">${esc(bigText)}</div>
+        ${subText ? `<div class="text-[10px] text-neutral-400 mt-0.5">${esc(subText)}</div>` : ``}
+      </div>
+    </div>
+  `;
 }
 
 function timeStrFromDate(d) {
@@ -309,9 +375,9 @@ function capFirst(str = "") {
 
 function parseTimeToMinutes(raw) {
   if (!raw) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-  const firstPart = s.split("–")[0].split("-")[0].trim();
+  const s0 = String(raw).trim();
+  if (!s0) return null;
+  const firstPart = s0.split("–")[0].split("-")[0].trim();
   const m = firstPart.match(/([0-9]{1,2}) *: *([0-9]{2}) *(am|pm)/i);
   if (!m) return null;
   let hh = parseInt(m[1], 10);
@@ -452,7 +518,7 @@ function playPutInChime() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v8";
+const STORAGE_KEY = "thanksgiving-oven-board:v9";
 
 function saveState(silent=false) {
   try {
@@ -581,6 +647,7 @@ const dashDinner = document.getElementById("dash-dinner");
 const dashNumbers = document.getElementById("dash-numbers");
 const dashBars = document.getElementById("dash-bars");
 const dashByPerson = document.getElementById("dash-by-person");
+const dashRandomTask = document.getElementById("dash-random-task");
 const btnDashRefresh = document.getElementById("btn-dash-refresh");
 
 const btnSave = document.getElementById("btn-save");
@@ -613,7 +680,7 @@ function renderPlan() {
 
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
-    tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${r.time ?? ""}">`;
+    tdTime.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="e.g., 3:35 PM" value="${esc(r.time ?? "")}">`;
     const timeInput = tdTime.querySelector("input");
     timeInput.addEventListener("input", (e) => {
       r.time = e.target.value;
@@ -637,7 +704,7 @@ function renderPlan() {
 
     const tdAction = document.createElement("td");
     tdAction.className = "p-2";
-    const actionOptions = actions.map(a => `<option value="${a}" ${r.action===a?"selected":""}>${capFirst(a)}</option>`).join("");
+    const actionOptions = actions.map(a => `<option value="${a}" ${r.action===a?"selected":""}>${esc(capFirst(a))}</option>`).join("");
     tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
     tdAction.querySelector("select").addEventListener("change", (e) => {
       r.action = e.target.value;
@@ -647,7 +714,7 @@ function renderPlan() {
 
     const tdItem = document.createElement("td");
     tdItem.className = "p-2";
-    tdItem.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="dish or note" value="${r.item ?? ""}">`;
+    tdItem.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="dish or note" value="${esc(r.item ?? "")}">`;
     tdItem.querySelector("input").addEventListener("input", (e) => {
       r.item = e.target.value;
       rebuildTimers(); seedPrepTasks(false); saveState(true);
@@ -655,7 +722,7 @@ function renderPlan() {
 
     const tdCook = document.createElement("td");
     tdCook.className = "p-2";
-    tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${r.cookMin ?? ""}">`;
+    tdCook.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="min or —" value="${esc(r.cookMin ?? "")}">`;
     const cookInput = tdCook.querySelector("input");
     cookInput.addEventListener("input", (e) => {
       r.cookMin = e.target.value;
@@ -670,12 +737,12 @@ function renderPlan() {
     tdTakeOut.className = "p-2";
     const takeOutStr = derivedTakeOutForRow(r);
     tdTakeOut.innerHTML = takeOutStr
-      ? `<div class="derived-cell">${takeOutStr}</div>`
+      ? `<div class="derived-cell">${esc(takeOutStr)}</div>`
       : `<div class="derived-muted">—</div>`;
 
     const tdPerson = document.createElement("td");
     tdPerson.className = "p-2";
-    tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${r.person ?? ""}">`;
+    tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${esc(r.person ?? "")}">`;
     const personInput = tdPerson.querySelector("input");
 
     personInput.addEventListener("input", (e) => {
@@ -694,7 +761,7 @@ function renderPlan() {
 
     const tdDel = document.createElement("td");
     tdDel.className = "p-2 text-right";
-    tdDel.innerHTML = `<button class="text-neutral-400 hover:text-red-400" title="delete row">🗑</button>`;
+    tdDel.innerHTML = `<button class="text-neutral-400 hover:text-red-400" title="delete row" aria-label="delete row">🗑</button>`;
     tdDel.querySelector("button").addEventListener("click", () => {
       timeline = timeline.filter(x => x.id !== r.id);
       prepTasks = prepTasks.filter(t => t.sourceRowId !== r.id);
@@ -784,7 +851,6 @@ function rebuildTimers() {
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
 function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
 function hasStarted(){ return !!startedAtTs; }
-function nowOffsetMs(){ return elapsedMs(); }
 
 function acknowledgeDone(id){
   acknowledgedDoneIds.add(id);
@@ -883,11 +949,11 @@ function renderGlobalAlarmOverlay(){
   globalAlarmList.innerHTML = overdueActive.map(it => `
     <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 flex items-center justify-between gap-3">
       <div>
-        <div class="text-sm font-semibold">${titleCase(it.item || "(Unnamed Dish)")}</div>
+        <div class="text-sm font-semibold">${esc(titleCase(it.item || "(Unnamed Dish)"))}</div>
         <div class="text-xs text-neutral-400">
-          Planned: ${it.plannedTime} • Cook ${it.cookMin} min
+          Planned: ${esc(it.plannedTime)} • Cook ${it.cookMin} min
           ${it.temp==="—"?"":" • "+it.temp+"°F"}
-          ${it.person?` • 👤 ${titleCase(it.person)}`:""}
+          ${it.person?` • 👤 ${esc(titleCase(it.person))}`:""}
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
@@ -967,7 +1033,7 @@ function renderRun(){
         const due = rem<=0;
         const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : "—";
         return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-          <div><div class="text-sm font-medium">Set temp → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
+          <div><div class="text-sm font-medium">Set temp → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${esc(tc.time)}</div></div>
           <div class="text-sm font-semibold ${due?"text-amber-300":"text-neutral-100"}">${due?"NOW":fmtCountdownHours(rem)}</div>
         </div>`;
       }).join("")}
@@ -1026,6 +1092,11 @@ function renderRun(){
     const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
     const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
 
+    const totalCookMs = it.cookMin * 60000;
+    const remainingCookMs = Math.max(0, untilDoneMs);
+    const totalPrepMs = Math.max(1, it.inOffsetMs);
+    const remainingPrepMs = Math.max(0, prepLeftMs);
+
     const card = document.createElement("div");
     card.dataset.cardId = it.id;
     card.className = "border rounded-2xl p-4 space-y-3 " + (
@@ -1036,10 +1107,36 @@ function renderRun(){
     if (needsAlarm) card.classList.add("alarm-tile");
 
     card.innerHTML = `
-      <div class="space-y-0.5">
-        <div class="text-lg font-semibold">${titleCase(it.item||"(Unnamed Dish)")}</div>
-        <div class="text-xs text-neutral-400">Planned: ${it.plannedTime} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}</div>
-        ${it.person ? `<div class="text-xs text-neutral-300">👤 ${titleCase(it.person)}</div>` : ``}
+      <div class="flex items-start justify-between gap-3">
+        <div class="space-y-0.5 min-w-0">
+          <div class="text-lg font-semibold truncate">${esc(titleCase(it.item||"(Unnamed Dish)"))}</div>
+          <div class="text-xs text-neutral-400">
+            Planned: ${esc(it.plannedTime)} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
+          </div>
+          ${it.person ? `<div class="text-xs text-neutral-300">👤 ${esc(titleCase(it.person))}</div>` : ``}
+        </div>
+
+        <div class="flex gap-2">
+          ${ringProgressHtml({
+            title: "until in",
+            remainingMs: remainingPrepMs,
+            totalMs: totalPrepMs,
+            colorClass: "text-emerald-400",
+            overdue: false,
+            bigText: prepLeftMs<=0 ? "in" : fmtCountdownShort(prepLeftMs),
+            subText: "prep"
+          })}
+
+          ${ringProgressHtml({
+            title: "until done",
+            remainingMs: remainingCookMs,
+            totalMs: totalCookMs,
+            colorClass: "text-amber-300",
+            overdue: untilDoneMs<=0 && !isDone && !isDelayedCard,
+            bigText: untilDoneMs<=0 ? "done" : fmtCountdownShort(untilDoneMs),
+            subText: "cook"
+          })}
+        </div>
       </div>
 
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
@@ -1061,7 +1158,7 @@ function renderRun(){
 
       ${showNextTemp ? `
         <div class="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-          🔔 Next up: set oven to <span class="font-semibold">${nextEv.temp}°F</span> at ${nextEv.time}
+          🔔 Next up: set oven to <span class="font-semibold">${nextEv.temp}°F</span> at ${esc(nextEv.time)}
         </div>
       ` : ``}
 
@@ -1266,7 +1363,7 @@ function populateBulkPersonSelect(){
   const people = getAllKnownPeople();
   prepBulkPersonSelect.innerHTML =
     `<option value="">Select existing person (optional)</option>` +
-    people.map(p => `<option value="${p}">${titleCase(p)}</option>`).join("");
+    people.map(p => `<option value="${esc(p)}">${esc(titleCase(p))}</option>`).join("");
 }
 
 function addPrepTasksBulk(){
@@ -1361,7 +1458,7 @@ function renderPrep(){
     card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
     card.innerHTML = `
       <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold">${titleCase(person)}</div>
+        <div class="text-lg font-semibold">${esc(titleCase(person))}</div>
         <div class="text-xs text-neutral-400">
           ${totals.grandDone}/${totals.grandTotal} done
           ${totals.subsTotal ? `<span class="text-neutral-500 ml-1">(${totals.parentsTotal} tasks + ${totals.subsTotal} subtasks)</span>` : ``}
@@ -1371,12 +1468,12 @@ function renderPrep(){
       <div class="flex items-center gap-2">
         <input
           class="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
-          placeholder="Add a task for ${titleCase(person)}…"
-          data-inline-task="${person}"
+          placeholder="Add a task for ${esc(titleCase(person))}…"
+          data-inline-task="${esc(person)}"
         />
         <button
           class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition"
-          data-inline-add="${person}"
+          data-inline-add="${esc(person)}"
         >Add</button>
       </div>
 
@@ -1396,7 +1493,7 @@ function renderPrep(){
       taskWrap.innerHTML = `
         <label class="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} data-task-check="${t.id}" />
-          <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${t.task}</span>
+          <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${esc(t.task)}</span>
           ${subtasks.length ? `<span class="text-[11px] text-neutral-400 ml-2">${subDone}/${subtasks.length} subtasks</span>` : ``}
           <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete" data-task-del="${t.id}">delete</button>
         </label>
@@ -1406,7 +1503,7 @@ function renderPrep(){
             subtasks.map(s => `
               <label class="flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 cursor-pointer">
                 <input type="checkbox" class="accent-emerald-500" ${s.done?"checked":""} data-sub-check="${t.id}::${s.id}" />
-                <span class="text-xs ${s.done?"line-through text-neutral-500":"text-neutral-200"}">${s.text}</span>
+                <span class="text-xs ${s.done?"line-through text-neutral-500":"text-neutral-200"}">${esc(s.text)}</span>
                 <button class="ml-auto text-neutral-600 hover:text-red-400 text-[10px]" title="delete subtask" data-sub-del="${t.id}::${s.id}">delete</button>
               </label>
             `).join("")
@@ -1514,8 +1611,8 @@ function renderDashNowNext(){
         ${upcoming.map(r=>`
           <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
             <div>
-              <div class="text-sm font-medium">${capFirst(r.action)} — ${titleCase(r.item||"")}</div>
-              <div class="text-xs text-neutral-400">${r.time}${r.action==="set oven temp" && r.temp!=="—" ? ` • → ${r.temp}°F` : ""}${r.person?` • 👤 ${titleCase(r.person)}`:""}</div>
+              <div class="text-sm font-medium">${esc(capFirst(r.action))} — ${esc(titleCase(r.item||""))}</div>
+              <div class="text-xs text-neutral-400">${esc(r.time)}${r.action==="set oven temp" && r.temp!=="—" ? ` • → ${r.temp}°F` : ""}${r.person?` • 👤 ${esc(titleCase(r.person))}`:""}</div>
             </div>
           </div>
         `).join("") || `<div class="text-sm text-neutral-500">No planned rows with parseable times yet.</div>`}
@@ -1524,7 +1621,7 @@ function renderDashNowNext(){
     return;
   }
 
-  const eMs = nowOffsetMs();
+  const eMs = elapsedMs();
 
   const events = timeline
     .map(r=>{
@@ -1561,6 +1658,8 @@ function renderDashNowNext(){
 
   const runway = futureEvents.slice(0,6);
 
+  const remToNextMs = nextEvent ? (nextEvent.offsetMs - eMs) : 0;
+
   dashNowNext.innerHTML = `
     <div class="text-xs uppercase tracking-widest text-neutral-500">control tower</div>
 
@@ -1580,7 +1679,7 @@ function renderDashNowNext(){
               const untilDoneMs = it.doneOffsetMs - eMs;
               return `
                 <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5">
-                  <div class="text-sm">${titleCase(it.item||"")}</div>
+                  <div class="text-sm">${esc(titleCase(it.item||""))}</div>
                   <div class="text-sm font-semibold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
                 </div>
               `;
@@ -1591,7 +1690,7 @@ function renderDashNowNext(){
         `}
 
         ${lastEvent ? `
-          <div class="text-xs text-neutral-500 mt-1">Last event: ${capFirst(lastEvent.action)} — ${titleCase(lastEvent.item||"")} (${lastEvent.time})</div>
+          <div class="text-xs text-neutral-500 mt-1">Last event: ${esc(capFirst(lastEvent.action))} — ${esc(titleCase(lastEvent.item||""))} (${esc(lastEvent.time)})</div>
         ` : ``}
       </div>
 
@@ -1600,14 +1699,27 @@ function renderDashNowNext(){
 
         ${nextEvent ? `
           <div class="text-sm font-medium">
-            ${capFirst(nextEvent.action)} — ${titleCase(nextEvent.item||"")}
+            ${esc(capFirst(nextEvent.action))} — ${esc(titleCase(nextEvent.item||""))}
           </div>
           <div class="text-xs text-neutral-400">
-            Planned: ${nextEvent.time}
-            ${nextEvent.person?` • 👤 ${titleCase(nextEvent.person)}`:""}
+            Planned: ${esc(nextEvent.time)}
+            ${nextEvent.person?` • 👤 ${esc(titleCase(nextEvent.person))}`:""}
             ${nextEvent.action==="set oven temp" && nextEvent.temp!=="—" ? ` • → ${nextEvent.temp}°F` : ``}
           </div>
-          <div class="text-2xl font-bold mt-1">⏳ ${fmtCountdownHours(nextEvent.offsetMs - eMs)}</div>
+
+          <div class="mt-2 flex items-center gap-3">
+            ${nextEvent.action==="put in" ? ringProgressHtml({
+              title: "until in",
+              remainingMs: Math.max(0, remToNextMs),
+              totalMs: Math.max(1, nextEvent.offsetMs),
+              colorClass: "text-emerald-400",
+              overdue: false,
+              bigText: fmtCountdownShort(remToNextMs),
+              subText: "prep"
+            }) : ``}
+
+            <div class="text-2xl font-bold">⏳ ${fmtCountdownHours(remToNextMs)}</div>
+          </div>
         ` : `
           <div class="text-sm text-neutral-400">No upcoming events left 🎉</div>
         `}
@@ -1625,11 +1737,11 @@ function renderDashNowNext(){
               <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2">
                 <div>
                   <div class="text-sm font-medium">
-                    ${capFirst(ev.action)} — ${titleCase(ev.item||"")}
+                    ${esc(capFirst(ev.action))} — ${esc(titleCase(ev.item||""))}
                   </div>
                   <div class="text-xs text-neutral-400">
-                    ${ev.time}
-                    ${ev.person?` • 👤 ${titleCase(ev.person)}`:""}
+                    ${esc(ev.time)}
+                    ${ev.person?` • 👤 ${esc(titleCase(ev.person))}`:""}
                     ${ev.action==="set oven temp" && ev.temp!=="—" ? ` • → ${ev.temp}°F` : ``}
                   </div>
                 </div>
@@ -1660,7 +1772,6 @@ function renderDashScrubber(){
     return `<div class="text-sm text-neutral-400">No scheduled events yet.</div>`;
   }
 
-  // persistent selected dot for tapping
   window.__selectedScrubId = window.__selectedScrubId || null;
   const selectedId = window.__selectedScrubId;
 
@@ -1668,7 +1779,6 @@ function renderDashScrubber(){
   const eMs = hasStarted() ? elapsedMs() : 0;
   const pctNow = Math.min(100, Math.max(0, (eMs / totalMs) * 100));
 
-  // lane packing to prevent overlaps
   const minGapPct = 6;
   const laneLastPct = [-Infinity, -Infinity, -Infinity];
   const laneOffsetsPx = [16, 30, 44];
@@ -1707,7 +1817,7 @@ function renderDashScrubber(){
       <button
         class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${dotClass} ${pulseClass} ${selectedClass}"
         style="left:${ev.leftPct}%"
-        aria-label="${label}"
+        aria-label="${esc(label)}"
         data-scrub-id="${ev.id}"
       ></button>
 
@@ -1715,7 +1825,7 @@ function renderDashScrubber(){
         class="absolute text-[10px] text-neutral-300 whitespace-nowrap -translate-x-1/2 select-none"
         style="left:${ev.leftPct}%; top: calc(50% + ${labelTop}px);"
       >
-        ${ev.time}
+        ${esc(ev.time)}
       </div>
     `;
   }).join("");
@@ -1737,8 +1847,8 @@ function renderDashScrubber(){
       </div>
 
       <div class="flex items-center justify-between text-xs text-neutral-500">
-        <div>${events[0].time}</div>
-        <div>${events[events.length-1].time}</div>
+        <div>${esc(events[0].time)}</div>
+        <div>${esc(events[events.length-1].time)}</div>
       </div>
 
       ${
@@ -1747,12 +1857,12 @@ function renderDashScrubber(){
                class="mt-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm">
             <div class="text-xs uppercase tracking-widest text-neutral-500">selected event</div>
             <div class="mt-1 font-semibold">
-              ${capFirst(selectedEv.action)} — ${titleCase(selectedEv.item || "(no item)")}
+              ${esc(capFirst(selectedEv.action))} — ${esc(titleCase(selectedEv.item || "(no item)"))}
             </div>
             <div class="text-xs text-neutral-400 mt-0.5">
-              Time: ${selectedEv.time}
+              Time: ${esc(selectedEv.time)}
               ${selectedEv.temp !== "—" ? ` • Temp: ${selectedEv.temp}°F` : ``}
-              ${selectedEv.person ? ` • 👤 ${titleCase(selectedEv.person)}` : ``}
+              ${selectedEv.person ? ` • 👤 ${esc(titleCase(selectedEv.person))}` : ``}
             </div>
             <div class="text-xs text-neutral-500 mt-1">
               Tap another dot to switch, or tap again to jump to it in Oven Timers.
@@ -1764,6 +1874,140 @@ function renderDashScrubber(){
       }
     </div>
   `;
+}
+
+/* ---------------------------
+   RANDOM TASK SELECTOR
+----------------------------*/
+let lastRandomTaskId = null;
+
+function getRandomTask(forPerson=""){
+  const person = normalizePerson(forPerson);
+
+  let pool = prepTasks.filter(t => !t.done);
+
+  if(person){
+    pool = pool.filter(t => normalizePerson(t.person) === person);
+  } else {
+    const unassigned = pool.filter(t => !normalizePerson(t.person));
+    if(unassigned.length) pool = unassigned;
+  }
+
+  if(!pool.length) return null;
+
+  let choices = pool;
+  if(lastRandomTaskId && pool.length > 1){
+    choices = pool.filter(t => t.id !== lastRandomTaskId);
+    if(!choices.length) choices = pool;
+  }
+
+  const pick = choices[Math.floor(Math.random()*choices.length)];
+  lastRandomTaskId = pick.id;
+  return pick;
+}
+
+function renderRandomTaskCard(t){
+  const p = normalizePerson(t.person);
+  return `
+    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <div class="text-sm font-semibold">${esc(t.task)}</div>
+        <div class="text-xs text-neutral-400 mt-0.5">
+          ${p ? `assigned to ${esc(titleCase(p))}` : `unassigned task`}
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        ${!p ? `
+          <button data-claim="${esc(t.id)}"
+            class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 rounded-lg px-3 py-1.5 text-xs">
+            claim it
+          </button>` : ``}
+
+        <button data-done="${esc(t.id)}"
+          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold">
+          mark done
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function wireRandomTaskCard(root, taskId){
+  const claimBtn = root.querySelector(`[data-claim="${taskId}"]`);
+  const doneBtn  = root.querySelector(`[data-done="${taskId}"]`);
+
+  if(claimBtn){
+    claimBtn.addEventListener("click", ()=>{
+      const name = prompt("who is claiming this task?");
+      const p = normalizePerson(name);
+      if(!p) return;
+      prepTasks = prepTasks.map(x => x.id===taskId ? {...x, person:p} : x);
+      renderPrep(); renderDash(); saveState(true);
+    });
+  }
+
+  if(doneBtn){
+    doneBtn.addEventListener("click", ()=>{
+      prepTasks = prepTasks.map(x => x.id===taskId ? {...x, done:true} : x);
+      renderPrep(); renderDash(); saveState(true);
+    });
+  }
+}
+
+function renderDashRandomTask(){
+  if(!dashRandomTask) return;
+
+  const people = getAllKnownPeople();
+  const currentPick = lastRandomTaskId
+    ? prepTasks.find(t => t.id === lastRandomTaskId)
+    : null;
+
+  dashRandomTask.innerHTML = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">random task helper</div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+      <div class="md:col-span-2">
+        <label class="text-xs text-neutral-400 block mb-1">pick tasks for (optional)</label>
+        <select id="random-person-select" class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm">
+          <option value="">Anyone / unassigned first</option>
+          ${people.map(p=>`<option value="${esc(p)}">${esc(titleCase(p))}</option>`).join("")}
+        </select>
+      </div>
+
+      <button id="btn-random-pick"
+        class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">
+        pick a random task
+      </button>
+    </div>
+
+    <div id="random-task-result" class="mt-2">
+      ${
+        currentPick && !currentPick.done
+          ? renderRandomTaskCard(currentPick)
+          : `<div class="text-sm text-neutral-400">no task picked yet. hit the button.</div>`
+      }
+    </div>
+  `;
+
+  const sel = dashRandomTask.querySelector("#random-person-select");
+  const btn = dashRandomTask.querySelector("#btn-random-pick");
+
+  btn.addEventListener("click", ()=>{
+    const pick = getRandomTask(sel.value);
+    const result = dashRandomTask.querySelector("#random-task-result");
+    if(!pick){
+      result.innerHTML = `<div class="text-sm text-neutral-400">no unfinished tasks match that filter 🎉</div>`;
+      return;
+    }
+    result.innerHTML = renderRandomTaskCard(pick);
+    wireRandomTaskCard(result, pick.id);
+    saveState(true);
+  });
+
+  if(currentPick){
+    const result = dashRandomTask.querySelector("#random-task-result");
+    wireRandomTaskCard(result, currentPick.id);
+  }
 }
 
 /* ---------------------------
@@ -1805,13 +2049,13 @@ function renderDash(){
       ${pastTemp ? `${pastTemp.temp}°F` : "—"}
     </div>
     <div class="text-sm text-neutral-400 mt-1">
-      ${pastTemp ? `set at ${pastTemp.time}` : "no active target yet"}
+      ${pastTemp ? `set at ${esc(pastTemp.time)}` : "no active target yet"}
     </div>
 
     ${nextTemp && live ? `
       <div class="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
         <div class="text-xs text-neutral-500 uppercase tracking-widest">next change</div>
-        <div class="text-lg font-semibold mt-1">→ ${nextTemp.temp}°F at ${nextTemp.time}</div>
+        <div class="text-lg font-semibold mt-1">→ ${nextTemp.temp}°F at ${esc(nextTemp.time)}</div>
         <div class="text-2xl font-bold mt-1">in ${fmtCountdownHours(nextTemp.offsetMs - eMs)}</div>
       </div>
     ` : ``}
@@ -1827,14 +2071,29 @@ function renderDash(){
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       ${inOvenNow.map(it=>{
         const untilDoneMs = it.doneOffsetMs - eMs;
+        const totalCookMs = it.cookMin * 60000;
+        const remainingCookMs = Math.max(0, untilDoneMs);
+
         return `
-          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2">
-            <div class="text-xl md:text-2xl font-semibold">${titleCase(it.item||"")}</div>
-            <div class="text-4xl md:text-5xl font-bold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
-            <div class="text-sm text-neutral-400">
-              planned ${it.plannedTime} • ${it.cookMin} min
-              ${it.person?` • 👤 ${titleCase(it.person)}`:""}
+          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-xl md:text-2xl font-semibold truncate">${esc(titleCase(it.item||""))}</div>
+              <div class="text-sm text-neutral-400 mt-1">
+                planned ${esc(it.plannedTime)} • ${it.cookMin} min
+                ${it.person?` • 👤 ${esc(titleCase(it.person))}`:""}
+              </div>
+              <div class="text-2xl font-bold mt-2">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
             </div>
+
+            ${ringProgressHtml({
+              title: "until done",
+              remainingMs: remainingCookMs,
+              totalMs: totalCookMs,
+              colorClass: "text-amber-300",
+              overdue: untilDoneMs<=0,
+              bigText: untilDoneMs<=0 ? "done" : fmtCountdownShort(untilDoneMs),
+              subText: "cook"
+            })}
           </div>
         `;
       }).join("")}
@@ -1895,8 +2154,6 @@ function renderDash(){
     ${activeDelay ? `<div class="text-amber-300 text-sm mt-2">cook paused for extra oven time</div>` : ``}
   `;
 
-  dashNowNext.classList.add("hidden");
-
   const people = new Set([
     ...prepTasks.filter(t=>normalizePerson(t.person)).map(t=>normalizePerson(t.person)),
     ...timeline.filter(r=>normalizePerson(r.person)).map(r=>normalizePerson(r.person))
@@ -1916,17 +2173,17 @@ function renderDash(){
       const subs = Array.isArray(t.subtasks) && t.subtasks.length
         ? `<div class="ml-4 mt-0.5 space-y-0.5">${t.subtasks.map(s=>{
             const sbox = s.done ? "✅" : "⬜";
-            return `<div class="text-[11px] ${s.done?"text-neutral-600 line-through":"text-neutral-300"}">${sbox} ${s.text}</div>`;
+            return `<div class="text-[11px] ${s.done?"text-neutral-600 line-through":"text-neutral-300"}">${sbox} ${esc(s.text)}</div>`;
           }).join("")}</div>`
         : "";
-      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${t.task}${subs}</div>`;
+      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${esc(t.task)}${subs}</div>`;
     }).join("") : `<div class="text-xs text-neutral-500">No prep tasks</div>`;
 
     return `
       <div class="bg-neutral-900 border border-neutral-800 rounded-xl">
-        <button data-person="${p}" class="w-full px-3 py-3 flex items-center justify-between hover:bg-neutral-800/60 transition rounded-xl">
+        <button data-person="${esc(p)}" class="w-full px-3 py-3 flex items-center justify-between hover:bg-neutral-800/60 transition rounded-xl">
           <div>
-            <div class="text-sm font-medium">${titleCase(p)}</div>
+            <div class="text-sm font-medium">${esc(titleCase(p))}</div>
             <div class="text-xs text-neutral-400">Prep ${doneForP}/${totalsForP.grandTotal}</div>
           </div>
           <div class="text-xs text-neutral-300 flex items-center gap-2">
@@ -1964,7 +2221,6 @@ function renderDash(){
     });
   });
 
-  // updated scrubber click: tap to select, tap again to jump to Run
   dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-scrub-id");
@@ -1977,6 +2233,7 @@ function renderDash(){
     });
   });
 
+  renderDashRandomTask();
   renderGlobalAlarmOverlay();
 }
 
