@@ -200,9 +200,6 @@ Set table"></textarea>
           <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Refresh</button>
         </div>
 
-        <!-- NEW: Random prep task picker -->
-        <div id="dash-random-prep" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
-
         <div id="dash-now-next" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -416,11 +413,6 @@ let expandedPrepInTimers = new Set();
 /* Anchor behavior */
 let anchorMinAtStart = null;
 
-/* NEW: Random prep task picker state */
-let randomPickMode = "all";        // "all" | "person"
-let randomPickPerson = "";         // normalized person name
-let currentRandomTaskId = null;    // prepTasks.id
-
 /* ---------------------------
    AUDIO
 ----------------------------*/
@@ -559,10 +551,6 @@ function saveState(silent=false) {
       acknowledgedDoneIds: [...acknowledgedDoneIds],
       chimeFiredInIds: [...chimeFiredInIds],
       bellFiredNextTempIds: [...bellFiredNextTempIds],
-      /* NEW: random picker persistence */
-      randomPickMode,
-      randomPickPerson,
-      currentRandomTaskId,
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -616,11 +604,6 @@ function loadState() {
     if (Array.isArray(data.bellFiredNextTempIds)) {
       bellFiredNextTempIds = new Set(data.bellFiredNextTempIds);
     }
-
-    /* NEW: load random picker */
-    randomPickMode = data.randomPickMode ?? "all";
-    randomPickPerson = data.randomPickPerson ?? "";
-    currentRandomTaskId = data.currentRandomTaskId ?? null;
 
     return true;
   } catch (err) {
@@ -681,7 +664,6 @@ const prepBulkPersonNewInput = document.getElementById("prep-bulk-person-new");
 const prepBulkTasksTextarea = document.getElementById("prep-bulk-tasks");
 const btnPrepBulkAdd = document.getElementById("btn-prep-bulk-add");
 
-const dashRandomPrep = document.getElementById("dash-random-prep"); /* NEW */
 const dashNowNext = document.getElementById("dash-now-next");
 const dashDinner = document.getElementById("dash-dinner");
 const dashNumbers = document.getElementById("dash-numbers");
@@ -1474,10 +1456,6 @@ function resetRun(){
   bellFiredNextTempIds.clear();
   expandedPrepInTimers.clear();
   anchorMinAtStart=null;
-
-  /* NEW: reset random picker to safe defaults */
-  currentRandomTaskId = null;
-
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
@@ -1754,10 +1732,6 @@ function renderPrep(){
       const id = chk.getAttribute("data-task-check");
       const done = e.target.checked;
       prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-
-      /* NEW: if random picker is showing this task and you checked it elsewhere, clear it */
-      if(currentRandomTaskId === id && done) currentRandomTaskId = null;
-
       renderPrep(); renderRun(); renderDash();
       if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
       renderGlobalAlarmOverlay(); saveState(true);
@@ -1769,9 +1743,6 @@ function renderPrep(){
       e.preventDefault();
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-
-      if(currentRandomTaskId === id) currentRandomTaskId = null;
-
       renderPrep(); renderRun(); renderDash();
       if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
       renderGlobalAlarmOverlay(); saveState(true);
@@ -1820,181 +1791,6 @@ function renderPrep(){
   });
 
   renderGlobalAlarmOverlay();
-}
-
-/* ---------------------------
-   NEW: RANDOM PREP PICKER (DASHBOARD)
-----------------------------*/
-function getUnfinishedPrepTasksForMode(){
-  const unfinished = prepTasks.filter(t => !t.done && normalizePerson(t.person));
-  if(randomPickMode === "person"){
-    const p = normalizePerson(randomPickPerson);
-    return unfinished.filter(t => normalizePerson(t.person) === p);
-  }
-  return unfinished;
-}
-
-function pickRandomPrepTask(){
-  const pool = getUnfinishedPrepTasksForMode();
-  if(!pool.length){
-    currentRandomTaskId = null;
-    renderDash(); saveState(true);
-    return;
-  }
-  const choice = pool[Math.floor(Math.random() * pool.length)];
-  currentRandomTaskId = choice.id;
-  renderDash(); saveState(true);
-}
-
-function markCurrentRandomTaskDone(){
-  if(!currentRandomTaskId) return;
-  prepTasks = prepTasks.map(t => t.id === currentRandomTaskId ? { ...t, done: true } : t);
-  currentRandomTaskId = null;
-  renderPrep(); renderRun(); renderDash();
-  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
-  renderGlobalAlarmOverlay(); saveState(true);
-}
-
-function renderDashRandomPrep(){
-  if(!dashRandomPrep) return;
-
-  const people = getAllKnownPeople();
-  const currentTask = currentRandomTaskId
-    ? prepTasks.find(t => t.id === currentRandomTaskId && !t.done)
-    : null;
-
-  const poolCount = getUnfinishedPrepTasksForMode().length;
-  const totalUnfinished = prepTasks.filter(t => !t.done && normalizePerson(t.person)).length;
-
-  const personSelectOptions = people.map(p =>
-    `<option value="${p}" ${normalizePerson(randomPickPerson)===p?"selected":""}>${titleCase(p)}</option>`
-  ).join("");
-
-  dashRandomPrep.innerHTML = `
-    <div class="flex items-start justify-between gap-3">
-      <div>
-        <div class="text-xs uppercase tracking-widest text-neutral-500">random prep task</div>
-        <div class="text-lg font-semibold">Pick something to knock out right now</div>
-        <div class="text-sm text-neutral-400">
-          Choose a person’s stack or go totally random.
-        </div>
-      </div>
-      <div class="text-xs text-neutral-500 text-right">
-        Available in pool: ${poolCount}<br/>
-        Total unfinished: ${totalUnfinished}
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div class="md:col-span-1 bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
-        <div class="text-xs uppercase tracking-widest text-neutral-500">mode</div>
-
-        <label class="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="radio" name="random-mode" value="all" ${randomPickMode==="all"?"checked":""} class="accent-emerald-500">
-          <span>Totally random (all people)</span>
-        </label>
-
-        <label class="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="radio" name="random-mode" value="person" ${randomPickMode==="person"?"checked":""} class="accent-emerald-500">
-          <span>From a person’s stack</span>
-        </label>
-
-        <div class="pt-1 ${randomPickMode==="person" ? "" : "opacity-40 pointer-events-none"}">
-          <select id="dash-random-person"
-                  class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-2 text-sm">
-            <option value="">Pick a person…</option>
-            ${personSelectOptions}
-          </select>
-        </div>
-
-        <button id="dash-random-pick"
-          class="w-full bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition">
-          🎲 Pick random task
-        </button>
-      </div>
-
-      <div class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-3">
-        <div class="text-xs uppercase tracking-widest text-neutral-500">current task</div>
-
-        ${
-          currentTask ? `
-            <div class="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-2">
-              <div class="text-xl font-semibold">${currentTask.task}</div>
-              <div class="text-sm text-neutral-400">👤 ${titleCase(currentTask.person || "")}</div>
-              ${currentTask.sourceRowId ? `<div class="text-xs text-neutral-500">Seeded from plan</div>` : ``}
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button id="dash-random-done"
-                class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition">
-                ✅ Mark done
-              </button>
-              <button id="dash-random-new"
-                class="flex-1 bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-2 text-sm font-semibold transition">
-                🔁 New task
-              </button>
-            </div>
-          ` : `
-            <div class="text-sm text-neutral-400 bg-neutral-950 border border-neutral-800 rounded-xl p-4">
-              No task picked yet — or nothing left in this pool.
-            </div>
-
-            <button id="dash-random-new"
-              class="w-full bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-2 text-sm font-semibold transition">
-              🎲 Pick a task
-            </button>
-          `
-        }
-      </div>
-    </div>
-  `;
-
-  // wire radios
-  dashRandomPrep.querySelectorAll('input[name="random-mode"]').forEach(r=>{
-    r.addEventListener("change", (e)=>{
-      randomPickMode = e.target.value;
-      // if switching to person with no person chosen, keep currentRandomTaskId but pool might be empty on next pick
-      renderDashRandomPrep();
-      saveState(true);
-    });
-  });
-
-  // wire person select
-  const personSel = dashRandomPrep.querySelector("#dash-random-person");
-  if(personSel){
-    personSel.addEventListener("change", (e)=>{
-      randomPickPerson = normalizePerson(e.target.value);
-      // if current task is from another person, clear it to avoid mismatch visuals
-      if(currentRandomTaskId){
-        const ct = prepTasks.find(t=>t.id===currentRandomTaskId);
-        if(ct && normalizePerson(ct.person)!==normalizePerson(randomPickPerson)){
-          currentRandomTaskId = null;
-        }
-      }
-      renderDashRandomPrep();
-      saveState(true);
-    });
-  }
-
-  // wire pick/new
-  const pickBtn = dashRandomPrep.querySelector("#dash-random-pick");
-  const newBtn = dashRandomPrep.querySelector("#dash-random-new");
-  [pickBtn, newBtn].filter(Boolean).forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      if(randomPickMode==="person" && !normalizePerson(randomPickPerson)){
-        // no person selected; just rerender so the user sees it
-        renderDashRandomPrep();
-        return;
-      }
-      pickRandomPrepTask();
-    });
-  });
-
-  // wire done
-  const doneBtn = dashRandomPrep.querySelector("#dash-random-done");
-  if(doneBtn){
-    doneBtn.addEventListener("click", markCurrentRandomTaskDone);
-  }
 }
 
 /* ---------------------------
@@ -2198,13 +1994,14 @@ function renderDashScrubber(){
 
     const isFlex = ev.action === "flex / oven off";
 
-    const dotClass = isServe
-      ? "bg-amber-300"
-      : isTemp
-        ? "bg-sky-400"
-        : isFlex
-          ? "bg-violet-400"
-          : "bg-emerald-400";
+const dotClass = isServe
+  ? "bg-amber-300"     // serve
+  : isTemp
+    ? "bg-sky-400"     // temp change
+    : isFlex
+      ? "bg-violet-400" // flex window (own color dot)
+      : "bg-emerald-400"; // normal actions (put in, reheat, etc.)
+
 
     const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
     const selectedClass = ev.id === selectedId ? "ring-2 ring-white/90" : "";
@@ -2279,7 +2076,6 @@ function renderDashScrubber(){
    DASHBOARD COMMAND CENTER
 ----------------------------*/
 function renderDash(){
-  renderDashRandomPrep();   /* NEW */
   renderDashNowNext();
 
   const live = hasStarted();
@@ -2572,12 +2368,6 @@ btnClearAll.addEventListener("click",()=>{
   bellFiredNextTempIds.clear();
   expandedPrepInTimers.clear();
   anchorMinAtStart=null;
-
-  /* NEW: reset random picker hard */
-  randomPickMode = "all";
-  randomPickPerson = "";
-  currentRandomTaskId = null;
-
   stopGlobalAlarmIfNoneActive();
   stopTicking();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
@@ -2597,12 +2387,6 @@ renderPlan();
 rebuildTimers();
 seedPrepTasks(true);
 setView(view || "plan");
-
-/* NEW: if there’s no current task saved, pre-pick one (non-destructive) */
-if(!currentRandomTaskId){
-  const pool = getUnfinishedPrepTasksForMode();
-  if(pool.length) currentRandomTaskId = pool[Math.floor(Math.random()*pool.length)].id;
-}
 
 if(startedAtTs){
   startTicking();
