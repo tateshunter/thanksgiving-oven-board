@@ -22,11 +22,6 @@
       border-color: rgba(239,68,68,0.7) !important;
     }
 
-    #dash-bars button[data-scrub-id],
-    #data-tab button[data-scrub-id]{
-      touch-action: manipulation;
-    }
-
     /* small view enter animation */
     .view-enter { animation: viewEnter .18s ease-out; }
     @keyframes viewEnter {
@@ -42,6 +37,33 @@
       0% { background-position: 0% 30%; }
       50% { background-position: 100% 70%; }
       100% { background-position: 0% 30%; }
+    }
+
+    /* tasteful ring timers */
+    .ring {
+      --p: 0%;
+      width: 58px;
+      height: 58px;
+      border-radius: 9999px;
+      background:
+        conic-gradient(#76ba43 var(--p), rgba(255,255,255,0.08) 0);
+      display: grid;
+      place-items: center;
+      box-shadow: inset 0 0 0 6px rgba(0,0,0,0.6);
+    }
+    .ring-inner {
+      width: 44px;
+      height: 44px;
+      border-radius: 9999px;
+      background: #0a0a0a;
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      color: #e5e7eb;
+      text-align: center;
+      line-height: 1.1;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.06);
     }
   </style>
 </head>
@@ -112,14 +134,12 @@
           <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Re-seed from plan</button>
         </div>
 
-        <!-- Single task add -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
           <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
           <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
           <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition hover:-translate-y-[1px] active:translate-y-0">Add prep task</button>
         </div>
 
-        <!-- Bulk add -->
         <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
           <div class="text-sm font-semibold">Bulk add tasks for one person</div>
 
@@ -208,7 +228,7 @@ Set table"></textarea>
           <div>
             <div class="text-xs uppercase tracking-widest text-neutral-500">data</div>
             <div class="text-lg font-semibold">Cook analytics</div>
-            <div class="text-sm text-neutral-400">Visual breakdown of oven flow, temps, and load.</div>
+            <div class="text-sm text-neutral-400">Tap points to see details. No sideways scrolling.</div>
           </div>
           <button id="btn-data-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Refresh charts</button>
         </div>
@@ -218,18 +238,21 @@ Set table"></textarea>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
             <div class="text-xs uppercase tracking-widest text-neutral-500">oven gantt</div>
-            <div id="data-gantt" class="w-full overflow-x-auto"></div>
+            <div id="data-gantt" class="w-full"></div>
+            <div id="data-gantt-details" class="text-xs text-neutral-400">Tap a block for details.</div>
           </div>
 
           <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
             <div class="text-xs uppercase tracking-widest text-neutral-500">oven load</div>
-            <div id="data-load" class="w-full overflow-x-auto"></div>
+            <div id="data-load" class="w-full"></div>
+            <div id="data-load-details" class="text-xs text-neutral-400">Tap a step point for details.</div>
           </div>
         </div>
 
         <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
           <div class="text-xs uppercase tracking-widest text-neutral-500">temperature schedule</div>
-          <div id="data-temps" class="w-full overflow-x-auto"></div>
+          <div id="data-temps" class="w-full"></div>
+          <div id="data-temps-details" class="text-xs text-neutral-400">Tap a temp change for details.</div>
         </div>
       </div>
     </section>
@@ -394,6 +417,15 @@ function taskTotals(tasksArr){
   };
 }
 
+function ringHTML(pct, label){
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return `
+    <div class="ring shrink-0" style="--p:${p}%">
+      <div class="ring-inner">${label || ""}</div>
+    </div>
+  `;
+}
+
 /* ---------------------------
    STATE
 ----------------------------*/
@@ -413,7 +445,9 @@ let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
 let chimeFiredInIds = new Set();
 
-let activeDelay = null; 
+let activeDelay = null;
+
+let dataSelected = { gantt: null, load: null, temps: null };
 
 /* ---------------------------
    AUDIO
@@ -503,7 +537,7 @@ function playPutInChime() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v9";
+const STORAGE_KEY = "thanksgiving-oven-board:v10";
 
 function saveState(silent=false) {
   try {
@@ -519,6 +553,7 @@ function saveState(silent=false) {
       sortAsc,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
       chimeFiredInIds: [...chimeFiredInIds],
+      dataSelected,
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -563,6 +598,8 @@ function loadState() {
     if (Array.isArray(data.chimeFiredInIds)) {
       chimeFiredInIds = new Set(data.chimeFiredInIds);
     }
+
+    if (data.dataSelected) dataSelected = data.dataSelected;
 
     return true;
   } catch (err) {
@@ -640,6 +677,9 @@ const dataSummary = document.getElementById("data-summary");
 const dataGantt = document.getElementById("data-gantt");
 const dataLoad = document.getElementById("data-load");
 const dataTemps = document.getElementById("data-temps");
+const dataGanttDetails = document.getElementById("data-gantt-details");
+const dataLoadDetails = document.getElementById("data-load-details");
+const dataTempsDetails = document.getElementById("data-temps-details");
 const btnDataRefresh = document.getElementById("btn-data-refresh");
 
 const btnSave = document.getElementById("btn-save");
@@ -664,11 +704,51 @@ function derivedTakeOutForRow(r) {
   return timeStrFromMinutes(plannedMin + dur);
 }
 
+function hasStarted(){ return !!startedAtTs; }
+function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
+function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
+
+/* live row color helper for Plan */
+function getPlanRowLiveStyle(r){
+  if(!hasStarted() || anchorMin == null) return null;
+
+  const plannedMin = parseTimeToMinutes(r.time);
+  if(plannedMin == null) return null;
+  const offsetMs = (plannedMin - anchorMin) * 60000;
+  const eMs = elapsedMs();
+
+  const cookMin = Number.isFinite(r.cookMin) ? r.cookMin : parseInt(r.cookMin, 10);
+  const isTimedPutIn = r.action === "put in" && Number.isFinite(cookMin);
+
+  if(!isTimedPutIn) return null;
+
+  const inMs = offsetMs;
+  const doneMs = offsetMs + cookMin*60000;
+
+  if(eMs >= doneMs){
+    if(acknowledgedDoneIds.has(r.id)) return "done";
+    return "overdue";
+  }
+  if(eMs >= inMs) return "ongoing";
+
+  return "upcoming";
+}
+
 function renderPlan() {
   tbody.innerHTML = "";
   timeline.forEach((r, idx) => {
     const tr = document.createElement("tr");
-    tr.className = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
+
+    const liveStyle = getPlanRowLiveStyle(r);
+    if(liveStyle === "done"){
+      tr.className = "bg-emerald-900/30 border-t border-emerald-700/40";
+    } else if(liveStyle === "ongoing"){
+      tr.className = "bg-amber-900/25 border-t border-amber-700/40";
+    } else if(liveStyle === "overdue"){
+      tr.className = "bg-rose-900/25 border-t border-rose-700/40";
+    } else {
+      tr.className = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
+    }
 
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
@@ -811,7 +891,7 @@ function rebuildTimers() {
   const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
   if (!parseableTimes.length) {
     timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
-    renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();
+    renderRun(); renderDash(); renderData(); renderPlan(); renderGlobalAlarmOverlay();
     return;
   }
   anchorMin = Math.min(...parseableTimes);
@@ -836,7 +916,6 @@ function rebuildTimers() {
     return { id:r.id, time:r.time, action:r.action, item:r.item, targetTemp, offsetMs: offsetMin*60000 };
   }).sort((a,b)=>a.offsetMs-b.offsetMs);
 
-  // fix: robust serve lookup so dinner countdown updates when plan changes
   const serveRow = timeline.find(r =>
     String(r.action||"").toLowerCase().trim()==="serve" &&
     parseTimeToMinutes(r.time)!=null
@@ -846,12 +925,9 @@ function rebuildTimers() {
     ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
     : finalDoneOffsetMs;
 
-  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();
+  renderRun(); renderDash(); renderData(); renderPlan(); renderGlobalAlarmOverlay();
 }
 
-function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
-function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
-function hasStarted(){ return !!startedAtTs; }
 function nowOffsetMs(){ return elapsedMs(); }
 
 function acknowledgeDone(id){
@@ -861,11 +937,11 @@ function acknowledgeDone(id){
   renderRun();
   renderDash();
   renderData();
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
 
-/* Planner event helpers */
 function getSortedPlannerEvents(){
   if(anchorMin == null) return [];
   return timeline
@@ -891,7 +967,6 @@ function getNextPlannerEvent(rowId){
   return i>=0 ? (evs[i+1] || null) : null;
 }
 
-/* Delay / Pause logic */
 function pauseTimelineForItem(itemId){
   if(activeDelay) return;
   activeDelay = { itemId, startTs: Date.now() };
@@ -906,7 +981,7 @@ function pauseTimelineForItem(itemId){
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); renderData(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -926,7 +1001,7 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); renderData(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 /* Global alarm overlay */
@@ -1010,6 +1085,8 @@ function renderRun(){
   } else {
     const remainingFinalMs = Math.max(0, finalDoneOffsetMs - elapsedMs());
     const targetFinalTs = effectiveNowTs() + remainingFinalMs;
+    const finalPct = finalDoneOffsetMs ? Math.round((elapsedMs()/finalDoneOffsetMs)*100) : 0;
+
     finalCountdownBox.innerHTML = `
       <div class="flex items-start justify-between gap-3">
         <div>
@@ -1017,9 +1094,12 @@ function renderRun(){
           <div class="text-5xl md:text-6xl font-bold mt-2">${fmtCountdownHours(remainingFinalMs)}</div>
           <div class="text-neutral-300 mt-2 text-sm">Until the last thing is done</div>
         </div>
-        <div class="text-right">
-          <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
-          <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
+        <div class="flex items-center gap-3">
+          ${ringHTML(finalPct, "final")}
+          <div class="text-right">
+            <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
+            <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
+          </div>
         </div>
       </div>`;
   }
@@ -1104,6 +1184,8 @@ function renderRun(){
     );
     if (needsAlarm) card.classList.add("alarm-tile");
 
+    const cookPct = Math.max(0, Math.min(100, Math.round(((it.cookMin*60000 - untilDoneMs)/(it.cookMin*60000))*100)));
+
     card.innerHTML = `
       <div class="space-y-0.5">
         <div class="text-lg font-semibold">${titleCase(it.item||"(Unnamed Dish)")}</div>
@@ -1118,7 +1200,10 @@ function renderRun(){
 
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">time until done</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
+        <div class="flex items-center gap-2">
+          ${inOven ? ringHTML(cookPct, "cook") : ""}
+          <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
+        </div>
       </div>
 
       ${isDelayedCard ? `
@@ -1201,6 +1286,7 @@ function startRun(){
   renderRun();
   renderDash();
   renderData();
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1213,6 +1299,7 @@ function pauseRun(){
   renderRun();
   renderDash();
   renderData();
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1225,6 +1312,7 @@ function resumeRun(){
   renderRun();
   renderDash();
   renderData();
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1244,13 +1332,20 @@ function resetRun(){
   renderRun();
   renderDash();
   renderData();
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
 
 function startTicking(){
   stopTicking();
-  tickInterval=setInterval(()=>{renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();},500);
+  tickInterval=setInterval(()=>{
+    renderRun();
+    renderDash();
+    renderData();
+    renderPlan();
+    renderGlobalAlarmOverlay();
+  },500);
 }
 
 function stopTicking(){
@@ -1859,9 +1954,13 @@ function renderDash(){
   } else {
     const remMs = Math.max(0, dinnerOffsetMs - eMs);
     const dinnerTs = effectiveNowTs() + remMs;
+    const dinnerPct = dinnerOffsetMs ? Math.round((eMs/dinnerOffsetMs)*100) : 0;
     dinnerHtml = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
-      <div class="text-5xl md:text-7xl font-bold mt-2">${fmtCountdownHours(remMs)}</div>
+      <div class="flex items-start justify-between gap-3 mt-2">
+        <div class="text-5xl md:text-7xl font-bold">${fmtCountdownHours(remMs)}</div>
+        ${ringHTML(dinnerPct, "dinner")}
+      </div>
       <div class="text-neutral-300 mt-2 text-sm">serve at ${timeStrFromDate(new Date(dinnerTs))}</div>
     `;
   }
@@ -1901,10 +2000,14 @@ function renderDash(){
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       ${inOvenNow.map(it=>{
         const untilDoneMs = it.doneOffsetMs - eMs;
+        const cookPct = Math.max(0, Math.min(100, Math.round(((it.cookMin*60000 - untilDoneMs)/(it.cookMin*60000))*100)));
         return `
           <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2">
             <div class="text-xl md:text-2xl font-semibold">${titleCase(it.item||"")}</div>
-            <div class="text-4xl md:text-5xl font-bold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
+            <div class="flex items-center gap-3">
+              ${ringHTML(cookPct, "cook")}
+              <div class="text-4xl md:text-5xl font-bold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
+            </div>
             <div class="text-sm text-neutral-400">
               planned ${it.plannedTime} • ${it.cookMin} min
               ${it.person?` • 👤 ${titleCase(it.person)}`:""}
@@ -2054,7 +2157,7 @@ function renderDash(){
 }
 
 /* ---------------------------
-   DATA TAB CHARTS
+   DATA TAB CHARTS (STATIC, TAP DETAILS)
 ----------------------------*/
 function renderData(){
   if(!dataSummary || !dataGantt || !dataLoad || !dataTemps) return;
@@ -2092,21 +2195,21 @@ function renderData(){
   renderGanttChart(totalRange, eMs);
   renderOvenLoadChart(totalRange, eMs);
   renderTempScheduleChart(totalRange, eMs);
+
+  saveState(true);
 }
 
 function renderGanttChart(totalRangeMs, eMs){
   if(!totalRangeMs || !timerItems.length){
     dataGantt.innerHTML = `<div class="text-sm text-neutral-400">Add timed “put in” rows to see an oven gantt.</div>`;
+    dataGanttDetails.textContent = "Tap a block for details.";
     return;
   }
 
-  const width = Math.max(900, totalRangeMs/60000*18);
+  const W = 900, H = 240;
   const rowH = 26;
-  const padL = 90;
-  const padR = 18;
-  const padT = 18;
+  const padL = 120, padR = 18, padT = 22, padB = 32;
 
-  // lane pack to avoid overlaps
   const lanes = [];
   const items = timerItems.map(it=>({...it}));
   items.forEach(it=>{
@@ -2116,16 +2219,16 @@ function renderGanttChart(totalRangeMs, eMs){
     it.lane = lane;
   });
 
-  const height = padT + (lanes.length * rowH) + 28;
-  const nowX = padL + (Math.max(0, Math.min(totalRangeMs, eMs)) / totalRangeMs) * (width - padL - padR);
+  const height = padT + (lanes.length * rowH) + padB;
+
+  const xScale = (ms)=> padL + (ms/totalRangeMs)*(W-padL-padR);
+  const nowX = xScale(Math.max(0, Math.min(totalRangeMs, eMs)));
 
   const blocks = items.map(it=>{
-    const x = padL + (it.inOffsetMs/totalRangeMs) * (width - padL - padR);
-    const w = Math.max(3, ((it.doneOffsetMs-it.inOffsetMs)/totalRangeMs) * (width - padL - padR));
+    const x = xScale(it.inOffsetMs);
+    const w = Math.max(3, xScale(it.doneOffsetMs) - xScale(it.inOffsetMs));
     const y = padT + it.lane*rowH;
     const label = titleCase(it.item||"(unnamed)");
-    const tempLabel = it.temp==="—" ? "" : ` • ${it.temp}°F`;
-    const personLabel = it.person ? ` • ${titleCase(it.person)}` : "";
     const isActive = eMs>=it.inOffsetMs && eMs<it.doneOffsetMs;
     const isOver = eMs>=it.doneOffsetMs;
     const fill = isOver ? "rgba(16,185,129,0.25)" : isActive ? "rgba(245,158,11,0.25)" : "rgba(99,102,241,0.18)";
@@ -2133,74 +2236,86 @@ function renderGanttChart(totalRangeMs, eMs){
 
     return `
       <g>
-        <rect x="${x}" y="${y}" rx="6" ry="6" width="${w}" height="18"
-              fill="${fill}" stroke="${stroke}" stroke-width="1.2"></rect>
+        <rect data-gantt-id="${it.id}" x="${x}" y="${y}" rx="6" ry="6" width="${w}" height="18"
+              fill="${fill}" stroke="${stroke}" stroke-width="1.2" style="cursor:pointer"></rect>
         <text x="${x+4}" y="${y+13}" font-size="10" fill="white">${label}</text>
-        <title>${label}${tempLabel}${personLabel} • ${it.plannedTime}</title>
       </g>
     `;
   }).join("");
 
-  // time ticks every 30 minutes
   const tickEveryMin = 30;
   const tickCount = Math.floor((totalRangeMs/60000)/tickEveryMin)+1;
   const ticks = Array.from({length: tickCount}, (_,i)=>{
     const min = i*tickEveryMin;
-    const x = padL + (min*60000/totalRangeMs)*(width-padL-padR);
+    const x = xScale(min*60000);
     const timeLabel = timeStrFromMinutes(anchorMin + min);
     return `
       <g>
-        <line x1="${x}" y1="${padT-6}" x2="${x}" y2="${height-22}" stroke="rgba(255,255,255,0.06)"></line>
+        <line x1="${x}" y1="${padT-8}" x2="${x}" y2="${height-padB+6}" stroke="rgba(255,255,255,0.06)"></line>
         <text x="${x}" y="${height-8}" font-size="10" fill="rgba(255,255,255,0.5)" text-anchor="middle">${timeLabel}</text>
       </g>
     `;
   }).join("");
 
   dataGantt.innerHTML = `
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
-
+    <svg id="svg-gantt" width="100%" height="${height}" viewBox="0 0 ${W} ${height}" preserveAspectRatio="xMidYMid meet">
       ${ticks}
-
-      <line x1="${nowX}" y1="${padT-6}" x2="${nowX}" y2="${height-22}"
+      <line x1="${nowX}" y1="${padT-8}" x2="${nowX}" y2="${height-padB+6}"
             stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
-
       ${blocks}
-
-      <text x="10" y="14" font-size="11" fill="rgba(255,255,255,0.6)">lanes auto-pack to show overlaps</text>
+      <text x="10" y="14" font-size="11" fill="rgba(255,255,255,0.6)">tap a block for details</text>
     </svg>
   `;
+
+  const selectedId = dataSelected.gantt;
+  if(selectedId){
+    const it = timerItems.find(x=>x.id===selectedId);
+    if(it){
+      dataGanttDetails.textContent = `${titleCase(it.item||"")}: planned ${it.plannedTime}, cook ${it.cookMin} min, done at ${timeStrFromMinutes(parseTimeToMinutes(it.plannedTime)+it.cookMin)}.`;
+    }
+  } else {
+    dataGanttDetails.textContent = "Tap a block for details.";
+  }
+
+  const svg = document.getElementById("svg-gantt");
+  svg?.querySelectorAll("[data-gantt-id]").forEach(rect=>{
+    rect.addEventListener("click", ()=>{
+      const id = rect.getAttribute("data-gantt-id");
+      dataSelected.gantt = id;
+      renderData();
+    });
+  });
 }
 
 function renderOvenLoadChart(totalRangeMs, eMs){
   if(!totalRangeMs || !timerItems.length){
     dataLoad.innerHTML = `<div class="text-sm text-neutral-400">Add timed “put in” rows to see oven load.</div>`;
+    dataLoadDetails.textContent = "Tap a step point for details.";
     return;
   }
 
-  const width = Math.max(900, totalRangeMs/60000*18);
-  const height = 220;
-  const padL = 44, padR = 18, padT = 18, padB = 28;
+  const W = 900, H = 220;
+  const padL = 54, padR = 18, padT = 18, padB = 32;
 
   const events = [];
   timerItems.forEach(t=>{
-    events.push({ t: t.inOffsetMs, delta: +1 });
-    events.push({ t: t.doneOffsetMs, delta: -1 });
+    events.push({ t: t.inOffsetMs, delta: +1, dishId: t.id, type: "in" });
+    events.push({ t: t.doneOffsetMs, delta: -1, dishId: t.id, type: "out" });
   });
   events.sort((a,b)=>a.t-b.t);
 
   let load=0;
-  const series=[{x:0,y:0}];
+  const series=[{x:0,y:0, type:"start"}];
   events.forEach(e=>{
     load += e.delta;
-    series.push({ x: e.t, y: load });
+    series.push({ x: e.t, y: load, dishId: e.dishId, type: e.type });
   });
-  series.push({ x: totalRangeMs, y: load });
+  series.push({ x: totalRangeMs, y: load, type:"end" });
 
   const maxLoad = Math.max(1, ...series.map(p=>p.y));
 
-  const xScale = (ms)=> padL + (ms/totalRangeMs)*(width-padL-padR);
-  const yScale = (v)=> padT + (1 - v/maxLoad)*(height-padT-padB);
+  const xScale = (ms)=> padL + (ms/totalRangeMs)*(W-padL-padR);
+  const yScale = (v)=> padT + (1 - v/maxLoad)*(H-padT-padB);
 
   const stepPath = () => {
     let d = `M ${xScale(series[0].x)} ${yScale(series[0].y)}`;
@@ -2220,51 +2335,79 @@ function renderOvenLoadChart(totalRangeMs, eMs){
 
   const nowX = xScale(Math.max(0, Math.min(totalRangeMs, eMs)));
 
-  dataLoad.innerHTML = `
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
+  const points = series
+    .filter(p=>p.type==="in" || p.type==="out")
+    .map((p,i)=>`
+      <circle data-load-idx="${i}" cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="4"
+              fill="rgba(16,185,129,1)" style="cursor:pointer"></circle>
+    `).join("");
 
+  dataLoad.innerHTML = `
+    <svg id="svg-load" width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       <path d="${areaPath()}" fill="rgba(16,185,129,0.18)"></path>
       <path d="${stepPath()}" fill="none" stroke="rgba(16,185,129,0.9)" stroke-width="2"></path>
 
-      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${height-padB}"
+      ${points}
+
+      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${H-padB}"
             stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
 
       ${Array.from({length:maxLoad+1}, (_,i)=>{
         const y = yScale(i);
         return `
-          <line x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
+          <line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
           <text x="${padL-8}" y="${y+4}" font-size="10" fill="rgba(255,255,255,0.6)" text-anchor="end">${i}</text>
         `;
       }).join("")}
 
-      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">dishes in oven over time</text>
+      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">tap a point for details</text>
     </svg>
   `;
+
+  const selectedIdx = dataSelected.load;
+  if(selectedIdx != null){
+    const p = series.filter(p=>p.type==="in"||p.type==="out")[selectedIdx];
+    if(p){
+      const dish = timerItems.find(x=>x.id===p.dishId);
+      const when = timeStrFromMinutes(anchorMin + Math.round(p.x/60000));
+      const label = dish ? titleCase(dish.item||"") : "dish";
+      dataLoadDetails.textContent = `${when}: ${label} ${p.type==="in" ? "went in" : "came out"} (oven load now ${p.y}).`;
+    }
+  } else {
+    dataLoadDetails.textContent = "Tap a step point for details.";
+  }
+
+  const svg = document.getElementById("svg-load");
+  const pickable = series.filter(p=>p.type==="in"||p.type==="out");
+  svg?.querySelectorAll("[data-load-idx]").forEach((c,i)=>{
+    c.addEventListener("click", ()=>{
+      dataSelected.load = i;
+      renderData();
+    });
+  });
 }
 
 function renderTempScheduleChart(totalRangeMs, eMs){
   if(!totalRangeMs || !tempChangeItems.length){
     dataTemps.innerHTML = `<div class="text-sm text-neutral-400">No temp change rows with parseable times yet.</div>`;
+    dataTempsDetails.textContent = "Tap a temp change for details.";
     return;
   }
 
-  const width = Math.max(900, totalRangeMs/60000*18);
-  const height = 220;
-  const padL = 54, padR = 18, padT = 18, padB = 28;
+  const W = 900, H = 220;
+  const padL = 64, padR = 18, padT = 18, padB = 32;
 
   const tempsSeries = tempChangeItems
     .filter(tc=>tc.targetTemp)
-    .map(tc=>({ x: tc.offsetMs, y: tc.targetTemp }))
+    .map(tc=>({ x: tc.offsetMs, y: tc.targetTemp, id: tc.id, time: tc.time }))
     .sort((a,b)=>a.x-b.x);
 
   const minTemp = Math.min(...tempsSeries.map(p=>p.y), 300);
   const maxTemp = Math.max(...tempsSeries.map(p=>p.y), 450);
 
-  const xScale = (ms)=> padL + (ms/totalRangeMs)*(width-padL-padR);
-  const yScale = (v)=> padT + (1 - (v-minTemp)/(maxTemp-minTemp || 1))*(height-padT-padB);
+  const xScale = (ms)=> padL + (ms/totalRangeMs)*(W-padL-padR);
+  const yScale = (v)=> padT + (1 - (v-minTemp)/(maxTemp-minTemp || 1))*(H-padT-padB);
 
-  // step line
   let d = `M ${xScale(0)} ${yScale(tempsSeries[0].y)}`;
   tempsSeries.forEach((p,i)=>{
     d += ` L ${xScale(p.x)} ${yScale(i===0?tempsSeries[0].y:tempsSeries[i-1].y)} L ${xScale(p.x)} ${yScale(p.y)}`;
@@ -2274,31 +2417,48 @@ function renderTempScheduleChart(totalRangeMs, eMs){
   const nowX = xScale(Math.max(0, Math.min(totalRangeMs, eMs)));
 
   dataTemps.innerHTML = `
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
-
+    <svg id="svg-temps" width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       <path d="${d}" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="2.5"></path>
 
-      ${tempsSeries.map(p=>`
-        <circle cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="3.5" fill="rgba(56,189,248,1)"></circle>
+      ${tempsSeries.map((p,i)=>`
+        <circle data-temp-idx="${i}" cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="5"
+                fill="rgba(56,189,248,1)" style="cursor:pointer"></circle>
         <text x="${xScale(p.x)}" y="${yScale(p.y)-8}" font-size="10" fill="rgba(255,255,255,0.75)" text-anchor="middle">${p.y}°</text>
       `).join("")}
 
-      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${height-padB}"
+      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${H-padB}"
             stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
 
       ${Array.from({length:5}, (_,i)=>{
         const v = minTemp + i*(maxTemp-minTemp)/4;
         const y = yScale(v);
         return `
-          <line x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
+          <line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
           <text x="${padL-8}" y="${y+4}" font-size="10" fill="rgba(255,255,255,0.6)" text-anchor="end">${Math.round(v)}°F</text>
         `;
       }).join("")}
 
-      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">target oven temperature over time</text>
+      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">tap a temp dot for details</text>
     </svg>
   `;
+
+  const selectedIdx = dataSelected.temps;
+  if(selectedIdx != null){
+    const p = tempsSeries[selectedIdx];
+    if(p){
+      dataTempsDetails.textContent = `${p.time}: set oven to ${p.y}°F.`;
+    }
+  } else {
+    dataTempsDetails.textContent = "Tap a temp change for details.";
+  }
+
+  const svg = document.getElementById("svg-temps");
+  svg?.querySelectorAll("[data-temp-idx]").forEach((c,i)=>{
+    c.addEventListener("click", ()=>{
+      dataSelected.temps = i;
+      renderData();
+    });
+  });
 }
 
 /* ---------------------------
@@ -2330,6 +2490,7 @@ function setView(next){
   if(view==="run") renderRun();
   if(view==="dash") renderDash();
   if(view==="data") renderData();
+  if(view==="plan") renderPlan();
 
   renderGlobalAlarmOverlay();
   saveState(true);
@@ -2382,6 +2543,7 @@ btnClearAll.addEventListener("click",()=>{
   stopGlobalAlarmIfNoneActive();
   stopTicking();
   document.body.classList.remove("cooking");
+  dataSelected = { gantt:null, load:null, temps:null };
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
 
