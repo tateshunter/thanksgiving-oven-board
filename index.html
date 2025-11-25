@@ -165,6 +165,9 @@ Set table"></textarea>
           <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Refresh</button>
         </div>
 
+        <!-- control tower panel -->
+        <div id="dash-now-next" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div id="dash-dinner" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
           <div id="dash-numbers" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
@@ -184,7 +187,6 @@ Set table"></textarea>
 ----------------------------*/
 const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
 
-/* ONLY status change here */
 const actions = [
   "set oven temp",
   "put in",
@@ -193,7 +195,6 @@ const actions = [
   "serve",
 ];
 
-/* DEFAULT TIMELINE unchanged except reheat statuses collapsed */
 const DEFAULT_TIMELINE = [
   { time: "1:00 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
@@ -212,10 +213,7 @@ const DEFAULT_TIMELINE = [
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
   { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
-
-  // new simple reheat window at 350 for 15 minutes
   { time: "5:45 PM", temp: 350, action: "reheat window", item: "final reheat window (covered)", cookMin: 15, person: "" },
-
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
 ];
 
@@ -227,6 +225,14 @@ function fmtCountdownHours(ms) {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtCountdownShort(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  const m = Math.floor(s/60);
+  const sec = s%60;
+  if(m >= 60) return fmtCountdownHours(ms);
+  return `${m}m ${String(sec).padStart(2,"0")}s`;
 }
 
 function timeStrFromDate(d) {
@@ -287,7 +293,6 @@ function parseTimeToMinutes(raw) {
   return hh * 60 + mm;
 }
 
-/* total tasks + subtasks helper */
 function taskTotals(tasksArr){
   const parentsTotal = tasksArr.length;
   const parentsDone  = tasksArr.filter(t => t.done).length;
@@ -478,6 +483,7 @@ const prepBulkPersonNewInput = document.getElementById("prep-bulk-person-new");
 const prepBulkTasksTextarea = document.getElementById("prep-bulk-tasks");
 const btnPrepBulkAdd = document.getElementById("btn-prep-bulk-add");
 
+const dashNowNext = document.getElementById("dash-now-next");
 const dashDinner = document.getElementById("dash-dinner");
 const dashNumbers = document.getElementById("dash-numbers");
 const dashBars = document.getElementById("dash-bars");
@@ -678,6 +684,8 @@ function rebuildTimers() {
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
 function elapsedMs(){ return !startedAtTs ? 0 : Math.max(0, effectiveNowTs()-startedAtTs-pausedAccumMs); }
+function hasStarted(){ return !!startedAtTs; }
+function nowOffsetMs(){ return elapsedMs(); }
 
 function acknowledgeDone(id){
   acknowledgedDoneIds.add(id);
@@ -870,17 +878,14 @@ function addPrepTask(person, task){
 
 function getAllKnownPeople(){
   const people = new Set();
-
   prepTasks.forEach(t => {
     const p = normalizePerson(t.person);
     if(p) people.add(p);
   });
-
   timeline.forEach(r => {
     const p = normalizePerson(r.person);
     if(p) people.add(p);
   });
-
   return [...people].sort();
 }
 
@@ -920,7 +925,6 @@ function addPrepTasksBulk(){
   renderPrep(); renderDash(); saveState(true);
 }
 
-/* ---- Subtask helpers ---- */
 function addSubtask(parentTaskId, text){
   const t = String(text || "").trim();
   if(!t) return;
@@ -1054,7 +1058,6 @@ function renderPrep(){
     });
   });
 
-  // parent task toggle
   prepContainer.querySelectorAll("[data-task-check]").forEach(chk => {
     chk.addEventListener("change", (e) => {
       const id = chk.getAttribute("data-task-check");
@@ -1064,7 +1067,6 @@ function renderPrep(){
     });
   });
 
-  // parent task delete
   prepContainer.querySelectorAll("[data-task-del]").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1074,7 +1076,6 @@ function renderPrep(){
     });
   });
 
-  // inline add per person
   prepContainer.querySelectorAll("[data-inline-add]").forEach(btn => {
     btn.addEventListener("click", () => {
       const person = btn.getAttribute("data-inline-add");
@@ -1088,7 +1089,6 @@ function renderPrep(){
     });
   });
 
-  // subtask add
   prepContainer.querySelectorAll("[data-sub-add]").forEach(btn => {
     btn.addEventListener("click", () => {
       const parentId = btn.getAttribute("data-sub-add");
@@ -1098,7 +1098,6 @@ function renderPrep(){
     });
   });
 
-  // subtask toggle
   prepContainer.querySelectorAll("[data-sub-check]").forEach(chk => {
     chk.addEventListener("change", (e) => {
       const key = chk.getAttribute("data-sub-check");
@@ -1107,7 +1106,6 @@ function renderPrep(){
     });
   });
 
-  // subtask delete
   prepContainer.querySelectorAll("[data-sub-del]").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1119,14 +1117,172 @@ function renderPrep(){
 }
 
 /* ---------------------------
+   DASHBOARD CONTROL TOWER (NOW / NEXT)
+----------------------------*/
+function renderDashNowNext(){
+  if(!dashNowNext) return;
+
+  if(!hasStarted() || anchorMin == null){
+    const upcoming = timeline
+      .map(r => {
+        const min = parseTimeToMinutes(r.time);
+        return { ...r, plannedMin:min };
+      })
+      .filter(r => r.plannedMin != null && r.action !== "serve")
+      .sort((a,b)=>a.plannedMin-b.plannedMin)
+      .slice(0,6);
+
+    dashNowNext.innerHTML = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500">control tower</div>
+      <div class="text-lg font-semibold">Upcoming from plan</div>
+      <div class="text-sm text-neutral-400">Start cook to activate live now/next countdowns.</div>
+      <div class="mt-3 space-y-2">
+        ${upcoming.map(r=>`
+          <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
+            <div>
+              <div class="text-sm font-medium">${capFirst(r.action)} — ${titleCase(r.item||"")}</div>
+              <div class="text-xs text-neutral-400">${r.time}${r.person?` • 👤 ${titleCase(r.person)}`:""}</div>
+            </div>
+          </div>
+        `).join("") || `<div class="text-sm text-neutral-500">No planned rows with parseable times yet.</div>`}
+      </div>
+    `;
+    return;
+  }
+
+  const eMs = nowOffsetMs();
+
+  const events = timeline
+    .map(r=>{
+      const plannedMin = parseTimeToMinutes(r.time);
+      if(plannedMin == null) return null;
+      const offsetMs = (plannedMin - anchorMin) * 60000;
+      return {
+        id: r.id,
+        action: r.action,
+        item: r.item,
+        person: normalizePerson(r.person),
+        temp: r.temp,
+        time: r.time,
+        offsetMs
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.offsetMs-b.offsetMs);
+
+  const pastEvents = events.filter(ev => ev.offsetMs <= eMs);
+  const futureEvents = events.filter(ev => ev.offsetMs > eMs);
+
+  const lastEvent = pastEvents[pastEvents.length-1] || null;
+  const nextEvent = futureEvents[0] || null;
+
+  const inOvenNow = timerItems.filter(t=>{
+    const prepLeftMs = t.inOffsetMs - eMs;
+    const untilDoneMs = t.doneOffsetMs - eMs;
+    return prepLeftMs <= 0 && untilDoneMs > 0;
+  });
+
+  const lastTempEvent = [...pastEvents].reverse().find(ev => ev.action === "set oven temp" && ev.temp !== "—");
+  const currentTemp = lastTempEvent ? lastTempEvent.temp : null;
+
+  const runway = futureEvents.slice(0,6);
+
+  dashNowNext.innerHTML = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">control tower</div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
+        <div class="text-xs uppercase tracking-widest text-neutral-500">now</div>
+
+        ${currentTemp ? `
+          <div class="text-sm">🌡️ Current target temp: <span class="font-semibold">${currentTemp}°F</span></div>
+        ` : `
+          <div class="text-sm text-neutral-400">🌡️ No temp target active yet</div>
+        `}
+
+        ${inOvenNow.length ? `
+          <div class="space-y-1">
+            ${inOvenNow.map(it=>{
+              const untilDoneMs = it.doneOffsetMs - eMs;
+              return `
+                <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5">
+                  <div class="text-sm">${titleCase(it.item||"")}</div>
+                  <div class="text-sm font-semibold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        ` : `
+          <div class="text-sm text-neutral-400">🔥 Nothing in oven right now</div>
+        `}
+
+        ${lastEvent ? `
+          <div class="text-xs text-neutral-500 mt-1">Last event: ${capFirst(lastEvent.action)} — ${titleCase(lastEvent.item||"")} (${lastEvent.time})</div>
+        ` : ``}
+      </div>
+
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
+        <div class="text-xs uppercase tracking-widest text-neutral-500">next</div>
+
+        ${nextEvent ? `
+          <div class="text-sm font-medium">
+            ${capFirst(nextEvent.action)} — ${titleCase(nextEvent.item||"")}
+          </div>
+          <div class="text-xs text-neutral-400">
+            Planned: ${nextEvent.time}
+            ${nextEvent.person?` • 👤 ${titleCase(nextEvent.person)}`:""}
+          </div>
+          <div class="text-2xl font-bold mt-1">⏳ ${fmtCountdownHours(nextEvent.offsetMs - eMs)}</div>
+        ` : `
+          <div class="text-sm text-neutral-400">No upcoming events left 🎉</div>
+        `}
+      </div>
+    </div>
+
+    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">runway (next up)</div>
+      ${runway.length ? `
+        <div class="space-y-2">
+          ${runway.map(ev=>{
+            const rem = ev.offsetMs - eMs;
+            const soon = rem <= 10*60*1000;
+            return `
+              <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2">
+                <div>
+                  <div class="text-sm font-medium">
+                    ${capFirst(ev.action)} — ${titleCase(ev.item||"")}
+                  </div>
+                  <div class="text-xs text-neutral-400">
+                    ${ev.time}
+                    ${ev.person?` • 👤 ${titleCase(ev.person)}`:""}
+                    ${ev.action==="set oven temp" && ev.temp!=="—" ? ` • → ${ev.temp}°F` : ``}
+                  </div>
+                </div>
+                <div class="text-sm font-semibold ${soon?"text-amber-300":"text-neutral-100"}">
+                  ${fmtCountdownHours(rem)}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : `
+        <div class="text-sm text-neutral-400">Nothing else scheduled.</div>
+      `}
+    </div>
+  `;
+}
+
+/* ---------------------------
    DASHBOARD
 ----------------------------*/
 function renderDash(){
+  renderDashNowNext();
+
   if(!startedAtTs || dinnerOffsetMs==null){
     dashDinner.innerHTML = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
       <div class="text-2xl font-semibold mt-1">🍽️ Start cook to activate countdown</div>
-      <div class="text-neutral-400 text-sm mt-1">Dinner time is based on your “serve” row (or last done item).</div>`;
+      <div class="text-neutral-400 text-sm mt-1">Dinner time is based on your serve row (or last done item).</div>`;
   } else {
     const remMs = Math.max(0, dinnerOffsetMs - elapsedMs());
     const dinnerTs = effectiveNowTs() + remMs;
