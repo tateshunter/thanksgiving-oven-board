@@ -89,11 +89,38 @@
           <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Re-seed from plan</button>
         </div>
 
+        <!-- Single task add -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
           <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
           <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
           <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">Add prep task</button>
-      </div>
+        </div>
+
+        <!-- Bulk add -->
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+          <div class="text-sm font-semibold">Bulk add tasks for one person</div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <select id="prep-bulk-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm">
+              <option value="">Select existing person (optional)</option>
+            </select>
+            <input id="prep-bulk-person-new" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="...or type a new person name" />
+          </div>
+
+          <textarea id="prep-bulk-tasks" rows="4"
+            class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
+            placeholder="One task per line:
+Chop onions
+Make gravy
+Set table"></textarea>
+
+          <button id="btn-prep-bulk-add"
+            class="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">
+            Add all tasks to this person
+          </button>
+
+          <div class="text-xs text-neutral-500">Tip: paste a list from Notes or a text doc, one task per line.</div>
+        </div>
 
         <div id="prep-container" class="space-y-3"></div>
       </div>
@@ -190,7 +217,6 @@ const DEFAULT_TIMELINE = [
   { time: "5:45 PM", temp: 350, action: "reheat window", item: "final reheat window (covered)", cookMin: 15, person: "" },
 
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
-
 ];
 
 function uuid() { return crypto.randomUUID(); }
@@ -417,6 +443,11 @@ const prepPersonInput = document.getElementById("prep-person");
 const prepTaskInput = document.getElementById("prep-task");
 const btnPrepAdd = document.getElementById("btn-prep-add");
 const btnPrepSeed = document.getElementById("btn-prep-seed");
+
+const prepBulkPersonSelect = document.getElementById("prep-bulk-person");
+const prepBulkPersonNewInput = document.getElementById("prep-bulk-person-new");
+const prepBulkTasksTextarea = document.getElementById("prep-bulk-tasks");
+const btnPrepBulkAdd = document.getElementById("btn-prep-bulk-add");
 
 const dashDinner = document.getElementById("dash-dinner");
 const dashNumbers = document.getElementById("dash-numbers");
@@ -804,9 +835,62 @@ function addPrepTask(person, task){
   renderPrep(); renderDash(); saveState(true);
 }
 
+function getAllKnownPeople(){
+  const people = new Set();
+
+  prepTasks.forEach(t => {
+    const p = normalizePerson(t.person);
+    if(p) people.add(p);
+  });
+
+  timeline.forEach(r => {
+    const p = normalizePerson(r.person);
+    if(p) people.add(p);
+  });
+
+  return [...people].sort();
+}
+
+function populateBulkPersonSelect(){
+  if(!prepBulkPersonSelect) return;
+
+  const people = getAllKnownPeople();
+  prepBulkPersonSelect.innerHTML =
+    `<option value="">Select existing person (optional)</option>` +
+    people.map(p => `<option value="${p}">${titleCase(p)}</option>`).join("");
+}
+
+function addPrepTasksBulk(){
+  const selected = normalizePerson(prepBulkPersonSelect.value);
+  const typed = normalizePerson(prepBulkPersonNewInput.value);
+  const person = typed || selected;
+
+  const raw = String(prepBulkTasksTextarea.value || "");
+  const lines = raw.split("\n").map(x => x.trim()).filter(Boolean);
+
+  if(!person || !lines.length) return;
+
+  lines.forEach(task => {
+    prepTasks.push({
+      id: uuid(),
+      person,
+      task,
+      done: false
+    });
+  });
+
+  prepBulkPersonSelect.value = "";
+  prepBulkPersonNewInput.value = "";
+  prepBulkTasksTextarea.value = "";
+
+  renderPrep(); renderDash(); saveState(true);
+}
+
 function renderPrep(){
   prepContainer.innerHTML = "";
   const visibleTasks = prepTasks.filter(t => normalizePerson(t.person));
+
+  populateBulkPersonSelect();
 
   if(!visibleTasks.length){
     prepContainer.innerHTML = `<div class="text-sm text-neutral-400">No prep tasks assigned yet. Add some above and include a person.</div>`;
@@ -825,12 +909,25 @@ function renderPrep(){
     const doneCount = tasks.filter(x=>x.done).length;
 
     const card = document.createElement("div");
-    card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2";
+    card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="text-lg font-semibold">${titleCase(person)}</div>
         <div class="text-xs text-neutral-400">${doneCount}/${tasks.length} done</div>
       </div>
+
+      <div class="flex items-center gap-2">
+        <input
+          class="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
+          placeholder="Add a task for ${titleCase(person)}…"
+          data-inline-task="${person}"
+        />
+        <button
+          class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition"
+          data-inline-add="${person}"
+        >Add</button>
+      </div>
+
       <div class="space-y-1" id="prep-list-${safeId(person)}"></div>
     `;
     prepContainer.appendChild(card);
@@ -847,6 +944,19 @@ function renderPrep(){
       row.querySelector("input").addEventListener("change", (e)=>{ t.done=e.target.checked; renderPrep(); renderDash(); saveState(true); });
       row.querySelector("button").addEventListener("click", (e)=>{ e.preventDefault(); prepTasks = prepTasks.filter(x=>x.id!==t.id); renderPrep(); renderDash(); saveState(true); });
       list.appendChild(row);
+    });
+  });
+
+  prepContainer.querySelectorAll("[data-inline-add]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const person = btn.getAttribute("data-inline-add");
+      const input = prepContainer.querySelector(`[data-inline-task="${person}"]`);
+      const task = input.value.trim();
+      if(!task) return;
+
+      prepTasks.push({ id: uuid(), person, task, done:false });
+      input.value = "";
+      renderPrep(); renderDash(); saveState(true);
     });
   });
 }
@@ -1025,6 +1135,7 @@ btnRunReset.addEventListener("click", resetRun);
 
 btnPrepAdd.addEventListener("click",()=>addPrepTask(prepPersonInput.value, prepTaskInput.value));
 btnPrepSeed.addEventListener("click",()=>seedPrepTasks(true));
+btnPrepBulkAdd.addEventListener("click", addPrepTasksBulk);
 
 btnDashRefresh.addEventListener("click",()=>renderDash());
 
