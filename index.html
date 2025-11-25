@@ -891,6 +891,25 @@ function getNextPlannerEvent(rowId){
   return i>=0 ? (evs[i+1] || null) : null;
 }
 
+/* New helper: current in-oven + next put-in */
+function getCurrentAndNextTimers(eMs){
+  const inOvenNow = timerItems.filter(t=>{
+    const prepLeftMs = t.inOffsetMs - eMs;
+    const untilDoneMs = t.doneOffsetMs - eMs;
+    return prepLeftMs <= 0 && untilDoneMs > 0;
+  });
+
+  const current = inOvenNow.length
+    ? inOvenNow
+        .map(t => ({ t, rem: t.doneOffsetMs - eMs }))
+        .sort((a,b)=>a.rem-b.rem)[0].t
+    : null;
+
+  const next = timerItems.find(t => t.inOffsetMs > eMs) || null;
+
+  return { current, next };
+}
+
 /* Delay / Pause logic */
 function pauseTimelineForItem(itemId){
   if(activeDelay) return;
@@ -1002,14 +1021,57 @@ function renderRun(){
 
   timersGrid.innerHTML = "";
 
+  const eMsTop = elapsedMs();
+  const { current, next } = getCurrentAndNextTimers(eMsTop);
+
   if(!startedAtTs || finalDoneOffsetMs==null){
     finalCountdownBox.innerHTML = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">final countdown</div>
       <div class="text-2xl font-semibold mt-1">Start cook to see final timer</div>
       <div class="text-neutral-400 text-sm mt-1">Time until the last timed dish is done.</div>`;
   } else {
-    const remainingFinalMs = Math.max(0, finalDoneOffsetMs - elapsedMs());
+    const remainingFinalMs = Math.max(0, finalDoneOffsetMs - eMsTop);
     const targetFinalTs = effectiveNowTs() + remainingFinalMs;
+
+    let ringsHtml = "";
+    if(current || next){
+      ringsHtml = `
+        <div class="mt-4 flex gap-4 flex-wrap">
+          ${
+            current ? (() => {
+              const totalCookMs = current.cookMin * 60000;
+              const remainingCookMs = Math.max(0, current.doneOffsetMs - eMsTop);
+              return ringProgressHtml({
+                title: "in-oven dish",
+                remainingMs: remainingCookMs,
+                totalMs: totalCookMs,
+                colorClass: "text-amber-300",
+                overdue: remainingCookMs<=0,
+                bigText: remainingCookMs<=0 ? "done" : fmtCountdownShort(remainingCookMs),
+                subText: titleCase(current.item||"")
+              });
+            })() : ""
+          }
+
+          ${
+            next ? (() => {
+              const remainingPrepMs = Math.max(0, next.inOffsetMs - eMsTop);
+              const totalPrepMs = Math.max(1, next.inOffsetMs);
+              return ringProgressHtml({
+                title: "next dish in",
+                remainingMs: remainingPrepMs,
+                totalMs: totalPrepMs,
+                colorClass: "text-emerald-400",
+                overdue: false,
+                bigText: fmtCountdownShort(remainingPrepMs),
+                subText: titleCase(next.item||"")
+              });
+            })() : ""
+          }
+        </div>
+      `;
+    }
+
     finalCountdownBox.innerHTML = `
       <div class="flex items-start justify-between gap-3">
         <div>
@@ -1021,7 +1083,9 @@ function renderRun(){
           <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
           <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
         </div>
-      </div>`;
+      </div>
+      ${ringsHtml}
+    `;
   }
 
   if(!tempChangeItems.length){
@@ -1109,7 +1173,6 @@ function renderRun(){
     );
     if (needsAlarm) card.classList.add("alarm-tile");
 
-    /* RINGS MOVED BELOW title block */
     card.innerHTML = `
       <div class="space-y-3">
         <div class="space-y-0.5 min-w-0">
@@ -1143,20 +1206,17 @@ function renderRun(){
         </div>
       </div>
 
-      <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-        <div class="text-xs text-neutral-400">prep time left (until oven)</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(prepLeftMs)}</div>
-      </div>
-
-      <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-        <div class="text-xs text-neutral-400">time until done</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
-      </div>
-
       ${isDelayedCard ? `
-        <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-          <div class="text-xs text-neutral-400">additional oven time</div>
-          <div class="text-base font-semibold inline-flex items-center gap-2">➕ ${fmtCountdownHours(extraMs)}</div>
+        <div class="flex gap-3 flex-wrap">
+          ${ringProgressHtml({
+            title: "extra oven time",
+            remainingMs: 0,
+            totalMs: Math.max(1, extraMs),
+            colorClass: "text-amber-300",
+            overdue: false,
+            bigText: fmtCountdownShort(extraMs),
+            subText: "delay"
+          })}
         </div>
       ` : ``}
 
@@ -1192,6 +1252,7 @@ function renderRun(){
                 >Item done – resume timeline</button>
               `
               : ``
+
         }
       </div>
     `;
@@ -1711,7 +1772,6 @@ function renderDashNowNext(){
             ${nextEvent.action==="set oven temp" && nextEvent.temp!=="—" ? ` • → ${nextEvent.temp}°F` : ``}
           </div>
 
-          <!-- ring moved below countdown -->
           <div class="mt-2 space-y-2">
             <div class="text-2xl font-bold">⏳ ${fmtCountdownHours(remToNextMs)}</div>
             ${nextEvent.action==="put in" ? `
@@ -2027,6 +2087,47 @@ function renderDash(){
   const live = hasStarted();
   const eMs = live ? elapsedMs() : 0;
 
+  const { current: dashCurrent, next: dashNext } = getCurrentAndNextTimers(eMs);
+
+  let dashRingsHtml = "";
+  if(live && (dashCurrent || dashNext)){
+    dashRingsHtml = `
+      <div class="mt-4 flex gap-4 flex-wrap">
+        ${
+          dashCurrent ? (() => {
+            const totalCookMs = dashCurrent.cookMin * 60000;
+            const remainingCookMs = Math.max(0, dashCurrent.doneOffsetMs - eMs);
+            return ringProgressHtml({
+              title: "in-oven dish",
+              remainingMs: remainingCookMs,
+              totalMs: totalCookMs,
+              colorClass: "text-amber-300",
+              overdue: remainingCookMs<=0,
+              bigText: remainingCookMs<=0 ? "done" : fmtCountdownShort(remainingCookMs),
+              subText: titleCase(dashCurrent.item||"")
+            });
+          })() : ""
+        }
+
+        ${
+          dashNext ? (() => {
+            const remainingPrepMs = Math.max(0, dashNext.inOffsetMs - eMs);
+            const totalPrepMs = Math.max(1, dashNext.inOffsetMs);
+            return ringProgressHtml({
+              title: "next dish in",
+              remainingMs: remainingPrepMs,
+              totalMs: totalPrepMs,
+              colorClass: "text-emerald-400",
+              overdue: false,
+              bigText: fmtCountdownShort(remainingPrepMs),
+              subText: titleCase(dashNext.item||"")
+            });
+          })() : ""
+        }
+      </div>
+    `;
+  }
+
   let dinnerHtml = "";
   if(!live || dinnerOffsetMs==null){
     dinnerHtml = `
@@ -2075,7 +2176,6 @@ function renderDash(){
     return live && prepLeftMs<=0 && untilDoneMs>0;
   });
 
-  /* rings moved below text in in-oven cards */
   const inOvenHtml = inOvenNow.length ? `
     <div class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
       ${inOvenNow.map(it=>{
@@ -2124,6 +2224,7 @@ function renderDash(){
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
         ${dinnerHtml}
+        ${dashRingsHtml}
       </div>
       <div class="bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
         ${tempHeroHtml}
