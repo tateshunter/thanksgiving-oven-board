@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Thanksgiving Oven Board (Vanilla)</title>
+  <title>Thanksgiving Oven Board (Command Center Dash)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -20,6 +20,11 @@
     .alarm-tile {
       animation: alarmFlash 1s infinite;
       border-color: rgba(239,68,68,0.7) !important;
+    }
+
+    /* dashboard scrubber touch polish */
+    #dash-bars button[data-scrub-id]{
+      touch-action: manipulation;
     }
   </style>
 </head>
@@ -356,12 +361,9 @@ let prepTasks = [];
 
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
-
-// NEW: track which "put in" chimes have already fired
 let chimeFiredInIds = new Set();
 
 let activeDelay = null; 
-// shape: { itemId: string, startTs: number }
 
 /* ---------------------------
    AUDIO
@@ -369,7 +371,6 @@ let activeDelay = null;
 let audioCtx = null;
 let alarmInterval = null;
 
-// Optional iOS fallback beep (tiny wav)
 const fallbackBeep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
 fallbackBeep.volume = 0.25;
 
@@ -393,7 +394,6 @@ function unlockAudioOnFirstGesture(){
 }
 unlockAudioOnFirstGesture();
 
-/* ---- DONE ALARM (beep beep) ---- */
 function startGlobalAlarm() {
   ensureAudio();
   if (alarmInterval) return;
@@ -424,11 +424,9 @@ function stopGlobalAlarmIfNoneActive() {
   alarmInterval = null;
 }
 
-/* ---- NEW: PUT-IN CHIME (pleasant ding) ---- */
 function playPutInChime() {
   ensureAudio();
   try {
-    // simple "ding-dong" two-tone chime
     const now = audioCtx.currentTime;
 
     const makeTone = (freq, start, dur, vol=0.18) => {
@@ -444,8 +442,8 @@ function playPutInChime() {
       osc.stop(start + dur + 0.02);
     };
 
-    makeTone(1046.5, now, 0.35);      // C6
-    makeTone(783.99, now + 0.22, 0.45); // G5
+    makeTone(1046.5, now, 0.35);
+    makeTone(783.99, now + 0.22, 0.45);
   } catch {
     fallbackBeep.currentTime = 0;
     fallbackBeep.play().catch(()=>{});
@@ -455,7 +453,7 @@ function playPutInChime() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v7";
+const STORAGE_KEY = "thanksgiving-oven-board:v8";
 
 function saveState(silent=false) {
   try {
@@ -470,7 +468,7 @@ function saveState(silent=false) {
       view,
       sortAsc,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
-      chimeFiredInIds: [...chimeFiredInIds],   // NEW
+      chimeFiredInIds: [...chimeFiredInIds],
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -512,7 +510,6 @@ function loadState() {
       acknowledgedDoneIds = new Set(data.acknowledgedDoneIds);
     }
 
-    // NEW
     if (Array.isArray(data.chimeFiredInIds)) {
       chimeFiredInIds = new Set(data.chimeFiredInIds);
     }
@@ -590,7 +587,6 @@ const btnDashRefresh = document.getElementById("btn-dash-refresh");
 const btnSave = document.getElementById("btn-save");
 const btnClearAll = document.getElementById("btn-clear-all");
 
-// Global alarm overlay refs
 const globalAlarmOverlay = document.getElementById("global-alarm-overlay");
 const globalAlarmList = document.getElementById("global-alarm-list");
 const globalAlarmClose = document.getElementById("global-alarm-close");
@@ -983,9 +979,8 @@ function renderRun(){
 
   const eMs = elapsedMs();
 
-  // NEW: fire chime right when it's time to "put in"
   timerItems.forEach(it => {
-    const dueToPutIn = eMs >= it.inOffsetMs; // we've reached planned "put in" time
+    const dueToPutIn = eMs >= it.inOffsetMs;
     const alreadyChimed = chimeFiredInIds.has(it.id);
     const isDelayed = activeDelay && activeDelay.itemId === it.id;
 
@@ -1032,6 +1027,7 @@ function renderRun(){
     const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
 
     const card = document.createElement("div");
+    card.dataset.cardId = it.id;
     card.className = "border rounded-2xl p-4 space-y-3 " + (
       isDone
         ? "bg-emerald-500/10 border-emerald-500/40"
@@ -1129,7 +1125,7 @@ function startRun(){
   pausedAtTs=null;
   pausedAccumMs=0;
   activeDelay=null;
-  chimeFiredInIds.clear(); // NEW: reset chimes on fresh start
+  chimeFiredInIds.clear();
   setView("run");
   startTicking();
   renderRun();
@@ -1169,20 +1165,35 @@ function resetRun(){
   activeDelay=null;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
-  chimeFiredInIds.clear(); // NEW
+  chimeFiredInIds.clear();
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
+
 function startTicking(){
   stopTicking();
   tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderGlobalAlarmOverlay();},500);
 }
+
 function stopTicking(){
   if(tickInterval) clearInterval(tickInterval);
   tickInterval=null;
+}
+
+/* jump to run card from dashboard scrubber */
+function gotoRunItem(id){
+  setView("run");
+  setTimeout(()=>{
+    const card = timersGrid.querySelector(`[data-card-id="${id}"]`);
+    if(card){
+      card.scrollIntoView({ behavior:"smooth", block:"center" });
+      card.classList.add("ring-2", "ring-emerald-400/80");
+      setTimeout(()=>card.classList.remove("ring-2","ring-emerald-400/80"), 1800);
+    }
+  }, 50);
 }
 
 /* ---------------------------
@@ -1637,34 +1648,152 @@ function renderDashNowNext(){
 }
 
 /* ---------------------------
-   DASHBOARD
+   DASHBOARD SCRUBBER
+----------------------------*/
+function renderDashScrubber(){
+  if(anchorMin == null){
+    return `<div class="text-sm text-neutral-400">Add parseable times in Plan to see timeline.</div>`;
+  }
+
+  const events = getSortedPlannerEvents();
+  if(!events.length){
+    return `<div class="text-sm text-neutral-400">No scheduled events yet.</div>`;
+  }
+
+  const totalMs = (events[events.length-1].offsetMs - events[0].offsetMs) || 1;
+  const eMs = hasStarted() ? elapsedMs() : 0;
+
+  const pctNow = Math.min(100, Math.max(0, (eMs / totalMs) * 100));
+
+  const dotHtml = events.map(ev=>{
+    const leftPct = ((ev.offsetMs - events[0].offsetMs) / totalMs) * 100;
+
+    const isTemp  = ev.action === "set oven temp";
+    const isServe = ev.action === "serve";
+    const overdue = hasStarted() && ev.action==="put in" && eMs > ev.offsetMs;
+
+    const dotClass = isServe
+      ? "bg-amber-300"
+      : isTemp
+        ? "bg-sky-400"
+        : "bg-emerald-400";
+
+    const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
+
+    const label = `${capFirst(ev.action)} — ${titleCase(ev.item||"")} (${ev.time})`;
+
+    return `
+      <button
+        class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${dotClass} ${pulseClass}"
+        style="left:${leftPct}%"
+        title="${label}"
+        data-scrub-id="${ev.id}"
+      ></button>
+      <div
+        class="absolute top-[calc(50%+14px)] text-[10px] text-neutral-400 whitespace-nowrap -translate-x-1/2"
+        style="left:${leftPct}%"
+      >
+        ${ev.time}
+      </div>
+    `;
+  }).join("");
+
+  const nowLine = hasStarted()
+    ? `<div class="absolute top-0 bottom-0 w-[3px] bg-white/80 shadow" style="left:${pctNow}%"></div>`
+    : `<div class="absolute top-0 bottom-0 w-[3px] bg-white/20" style="left:0%"></div>`;
+
+  return `
+    <div class="space-y-2">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">timeline</div>
+
+      <div class="relative h-16 bg-neutral-900 border border-neutral-800 rounded-2xl px-3">
+        <div class="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-2 rounded-full bg-neutral-800"></div>
+        ${nowLine}
+        ${dotHtml}
+      </div>
+
+      <div class="flex items-center justify-between text-xs text-neutral-500">
+        <div>${events[0].time}</div>
+        <div>${events[events.length-1].time}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------------------
+   DASHBOARD COMMAND CENTER
 ----------------------------*/
 function renderDash(){
   renderDashNowNext();
 
-  if(!startedAtTs || dinnerOffsetMs==null){
-    dashDinner.innerHTML = `
+  const live = hasStarted();
+  const eMs = live ? elapsedMs() : 0;
+
+  let dinnerHtml = "";
+  if(!live || dinnerOffsetMs==null){
+    dinnerHtml = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
-      <div class="text-2xl font-semibold mt-1">🍽️ Start cook to activate countdown</div>
-      <div class="text-neutral-400 text-sm mt-1">Dinner time is based on your serve row (or last done item).</div>`;
+      <div class="text-4xl md:text-6xl font-bold mt-2">start cook</div>
+      <div class="text-neutral-400 text-sm mt-1">dinner time uses your serve row (or last done dish).</div>
+    `;
   } else {
-    const remMs = Math.max(0, dinnerOffsetMs - elapsedMs());
+    const remMs = Math.max(0, dinnerOffsetMs - eMs);
     const dinnerTs = effectiveNowTs() + remMs;
-    const urgency = remMs <= 15*60*1000;
-    dashDinner.innerHTML = `
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
-          <div class="text-5xl md:text-6xl font-bold mt-2 ${urgency ? "animate-pulse text-amber-200" : "text-neutral-100"}">${fmtCountdownHours(remMs)}</div>
-          <div class="text-neutral-300 mt-2 text-sm">Until serve time</div>
-        </div>
-        <div class="text-right">
-          <div class="text-xs text-neutral-500 uppercase tracking-widest">serve at</div>
-          <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(dinnerTs))}</div>
-          <div class="text-xs text-neutral-400 mt-1">${urgency ? "🚨 final stretch" : "✅ cruising"}</div>
-        </div>
-      </div>`;
+    dinnerHtml = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
+      <div class="text-5xl md:text-7xl font-bold mt-2">${fmtCountdownHours(remMs)}</div>
+      <div class="text-neutral-300 mt-2 text-sm">serve at ${timeStrFromDate(new Date(dinnerTs))}</div>
+    `;
   }
+
+  const pastTemp = getSortedPlannerEvents()
+    .filter(ev => ev.action==="set oven temp" && ev.temp!=="—" && ev.offsetMs<=eMs)
+    .slice(-1)[0];
+
+  const nextTemp = getSortedPlannerEvents()
+    .find(ev => ev.action==="set oven temp" && ev.temp!=="—" && ev.offsetMs>eMs);
+
+  const tempHeroHtml = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">oven temp</div>
+    <div class="text-4xl md:text-5xl font-bold mt-2">
+      ${pastTemp ? `${pastTemp.temp}°F` : "—"}
+    </div>
+    <div class="text-sm text-neutral-400 mt-1">
+      ${pastTemp ? `set at ${pastTemp.time}` : "no active target yet"}
+    </div>
+
+    ${nextTemp && live ? `
+      <div class="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+        <div class="text-xs text-neutral-500 uppercase tracking-widest">next change</div>
+        <div class="text-lg font-semibold mt-1">→ ${nextTemp.temp}°F at ${nextTemp.time}</div>
+        <div class="text-2xl font-bold mt-1">in ${fmtCountdownHours(nextTemp.offsetMs - eMs)}</div>
+      </div>
+    ` : ``}
+  `;
+
+  const inOvenNow = timerItems.filter(t=>{
+    const prepLeftMs = t.inOffsetMs - eMs;
+    const untilDoneMs = t.doneOffsetMs - eMs;
+    return live && prepLeftMs<=0 && untilDoneMs>0;
+  });
+
+  const inOvenHtml = inOvenNow.length ? `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      ${inOvenNow.map(it=>{
+        const untilDoneMs = it.doneOffsetMs - eMs;
+        return `
+          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2">
+            <div class="text-xl md:text-2xl font-semibold">${titleCase(it.item||"")}</div>
+            <div class="text-4xl md:text-5xl font-bold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
+            <div class="text-sm text-neutral-400">
+              planned ${it.plannedTime} • ${it.cookMin} min
+              ${it.person?` • 👤 ${titleCase(it.person)}`:""}
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  ` : `<div class="text-lg text-neutral-400">nothing in oven right now</div>`;
 
   const prepTotalsAll = taskTotals(prepTasks);
   const totalPrep = prepTotalsAll.grandTotal;
@@ -1672,35 +1801,55 @@ function renderDash(){
   const prepPct   = totalPrep ? Math.round(donePrep/totalPrep*100) : 0;
 
   const totalOven = timerItems.length;
-  const doneOven = totalOven ? timerItems.filter(t => startedAtTs && elapsedMs() >= t.doneOffsetMs).length : 0;
+  const doneOven = totalOven ? timerItems.filter(t => live && eMs >= t.doneOffsetMs).length : 0;
   const ovenPct = totalOven ? Math.round(doneOven/totalOven*100) : 0;
 
-  const nextOven = (() => {
-    if(!startedAtTs) return null;
-    const eMs = elapsedMs();
-    return timerItems.find(t => t.inOffsetMs - eMs > 0) || null;
-  })();
+  dashDinner.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
+        ${dinnerHtml}
+      </div>
+      <div class="bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
+        ${tempHeroHtml}
+      </div>
+    </div>
 
-  dashNumbers.innerHTML = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">stats</div>
-    <div class="text-sm">🧑‍🍳 Prep items: <span class="font-semibold">${donePrep}/${totalPrep}</span></div>
-    <div class="text-xs text-neutral-500 ml-6">(${prepTotalsAll.parentsTotal} tasks + ${prepTotalsAll.subsTotal} subtasks)</div>
-    <div class="text-sm">🔥 Oven dishes done: <span class="font-semibold">${doneOven}/${totalOven}</span></div>
-    <div class="text-sm">🌡️ Temp changes left: <span class="font-semibold">${tempChangeItems.length}</span></div>
-    ${nextOven ? `<div class="mt-2 text-xs text-neutral-300">Next oven item: <span class="font-semibold">${titleCase(nextOven.item||"")}</span> in ${fmtCountdownHours(nextOven.inOffsetMs - elapsedMs())}</div>` : ``}
-    ${activeDelay ? `<div class="mt-2 text-xs text-amber-300">⏸ Cook paused for extra oven time</div>` : ``}
+    <div class="mt-4 bg-neutral-950 border border-neutral-800 rounded-3xl p-6 space-y-3">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">in oven now</div>
+      ${inOvenHtml}
+    </div>
   `;
 
   dashBars.innerHTML = `
-    <div>
-      <div class="flex items-center justify-between text-sm mb-1"><span>🧑‍🍳 Prep completion</span><span>${prepPct}%</span></div>
-      <div class="bar"><div style="width:${prepPct}%"></div></div>
-    </div>
-    <div>
-      <div class="flex items-center justify-between text-sm mb-1"><span>🔥 Oven timeline completion</span><span>${ovenPct}%</span></div>
-      <div class="bar"><div style="width:${ovenPct}%"></div></div>
+    ${renderDashScrubber()}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
+      <div>
+        <div class="flex items-center justify-between text-base mb-2">
+          <span>prep completion</span><span>${prepPct}%</span>
+        </div>
+        <div class="bar h-3"><div style="width:${prepPct}%"></div></div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between text-base mb-2">
+          <span>oven timeline</span><span>${ovenPct}%</span>
+        </div>
+        <div class="bar h-3"><div style="width:${ovenPct}%"></div></div>
+      </div>
     </div>
   `;
+
+  dashNumbers.innerHTML = `
+    <div class="text-xs uppercase tracking-widest text-neutral-500">quick stats</div>
+    <div class="text-lg">prep ${donePrep}/${totalPrep}</div>
+    <div class="text-xs text-neutral-500">(${prepTotalsAll.parentsTotal} tasks + ${prepTotalsAll.subsTotal} subtasks)</div>
+    <div class="text-lg">oven done ${doneOven}/${totalOven}</div>
+    <div class="text-lg">temp changes left ${tempChangeItems.length}</div>
+    ${activeDelay ? `<div class="text-amber-300 text-sm mt-2">cook paused for extra oven time</div>` : ``}
+  `;
+
+  dashNowNext.classList.add("hidden");
 
   const people = new Set([
     ...prepTasks.filter(t=>normalizePerson(t.person)).map(t=>normalizePerson(t.person)),
@@ -1766,6 +1915,13 @@ function renderDash(){
 
       if(open) openPeople.delete(key);
       else openPeople.add(key);
+    });
+  });
+
+  dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-scrub-id");
+      gotoRunItem(id);
     });
   });
 
@@ -1844,7 +2000,6 @@ btnClearAll.addEventListener("click",()=>{
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
 
-// Global overlay controls
 globalAlarmClose.addEventListener("click", ()=>{
   globalAlarmOverlay.classList.add("hidden");
   globalAlarmOverlay.classList.remove("flex");
