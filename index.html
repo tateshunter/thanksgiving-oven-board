@@ -693,10 +693,29 @@ function derivedTakeOutForRow(r) {
   return timeStrFromMinutes(plannedMin + dur);
 }
 
+/* NEW: avoid rebuilding plan while user is typing */
+function isEditingPlan(){
+  return view === "plan" && tbody && tbody.contains(document.activeElement);
+}
+
+/* NEW: only update row highlight classes without destroying inputs */
+function updatePlanRowHighlights(){
+  if(!tbody) return;
+  const rows = Array.from(tbody.children);
+  rows.forEach((tr, idx)=>{
+    const r = timeline[idx];
+    if(!r) return;
+    tr.className = planRowStatusClass(r, idx);
+  });
+}
+
 function planRowStatusClass(r, idx){
   const zebra = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
 
   if(!hasStarted() || anchorMin == null) return zebra;
+
+  /* FIX: don't live-highlight flex/off or reheat windows (they look "early") */
+  if (r.action === "flex / oven off" || r.action === "reheat window") return zebra;
 
   const eMs = elapsedMs();
   const plannedMin = parseTimeToMinutes(r.time);
@@ -741,6 +760,7 @@ function renderPlan() {
       r.time = e.target.value;
       rebuildTimers();
       saveState(true);
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
     });
     timeInput.addEventListener("blur", () => {
       renderPlan();
@@ -773,6 +793,7 @@ function renderPlan() {
     tdItem.querySelector("input").addEventListener("input", (e) => {
       r.item = e.target.value;
       rebuildTimers(); seedPrepTasks(false); saveState(true);
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
     });
 
     const tdCook = document.createElement("td");
@@ -782,6 +803,7 @@ function renderPlan() {
     cookInput.addEventListener("input", (e) => {
       r.cookMin = e.target.value;
       rebuildTimers(); saveState(true);
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
     });
     cookInput.addEventListener("blur", () => {
       renderPlan();
@@ -872,6 +894,7 @@ function rebuildTimers() {
   if (!parseableTimes.length) {
     timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
     renderRun(); renderDash(); renderGlobalAlarmOverlay();
+    if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
     return;
   }
   anchorMin = Math.min(...parseableTimes);
@@ -907,7 +930,7 @@ function rebuildTimers() {
     : finalDoneOffsetMs;
 
   renderRun(); renderDash(); renderGlobalAlarmOverlay();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
 }
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
@@ -921,7 +944,7 @@ function acknowledgeDone(id){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -968,7 +991,9 @@ function pauseTimelineForItem(itemId){
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -988,7 +1013,9 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 /* Global alarm overlay */
@@ -1058,7 +1085,9 @@ function getPrepTasksForRow(rowId){
 }
 function togglePrepParentDone(taskId, done){
   prepTasks = prepTasks.map(t => t.id===taskId ? { ...t, done } : t);
-  renderRun(); renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 function togglePrepSubDone(parentId, subId, done){
   prepTasks = prepTasks.map(pt=>{
@@ -1066,7 +1095,9 @@ function togglePrepSubDone(parentId, subId, done){
     const subs=(pt.subtasks||[]).map(s=>s.id===subId ? { ...s, done } : s);
     return { ...pt, subtasks: subs };
   });
-  renderRun(); renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function renderRun(){
@@ -1128,7 +1159,7 @@ function renderRun(){
       </div>`;
   }
 
-  if(!timerItems.length){ noTimers.classList.remove("hidden"); renderGlobalAlarmOverlay(); renderPlan(); return; }
+  if(!timerItems.length){ noTimers.classList.remove("hidden"); renderGlobalAlarmOverlay(); if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights(); return; }
   noTimers.classList.add("hidden");
 
   const eMs = elapsedMs();
@@ -1366,7 +1397,7 @@ function renderRun(){
   });
 
   renderGlobalAlarmOverlay();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
 }
 
 function startRun(){
@@ -1383,7 +1414,7 @@ function startRun(){
   startTicking();
   renderRun();
   renderDash();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1395,7 +1426,7 @@ function pauseRun(){
   startTicking();
   renderRun();
   renderDash();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1407,7 +1438,7 @@ function resumeRun(){
   startTicking();
   renderRun();
   renderDash();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1435,7 +1466,15 @@ function resetRun(){
 
 function startTicking(){
   stopTicking();
-  tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderPlan(); renderGlobalAlarmOverlay();},500);
+  tickInterval=setInterval(()=>{
+    renderRun();
+    renderDash();
+    /* CRITICAL FIX: do NOT rebuild plan while ticking */
+    if(view==="plan" && !isEditingPlan()){
+      updatePlanRowHighlights();
+    }
+    renderGlobalAlarmOverlay();
+  },500);
 }
 
 function stopTicking(){
@@ -1492,7 +1531,7 @@ function seedPrepTasks(force=true){
 
   renderPrep();
   renderDash();
-  renderPlan();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1543,7 +1582,9 @@ function addPrepTasksBulk(){
   prepBulkPersonNewInput.value = "";
   prepBulkTasksTextarea.value = "";
 
-  renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function addSubtask(parentTaskId, text){
@@ -1559,7 +1600,9 @@ function addSubtask(parentTaskId, text){
     };
   });
 
-  renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function toggleSubtaskDone(parentTaskId, subId, done){
@@ -1571,7 +1614,9 @@ function toggleSubtaskDone(parentTaskId, subId, done){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function deleteSubtask(parentTaskId, subId){
@@ -1581,7 +1626,9 @@ function deleteSubtask(parentTaskId, subId){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function renderPrep(){
@@ -1685,7 +1732,9 @@ function renderPrep(){
       const id = chk.getAttribute("data-task-check");
       const done = e.target.checked;
       prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-      renderPrep(); renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderRun(); renderDash();
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+      renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1694,7 +1743,9 @@ function renderPrep(){
       e.preventDefault();
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-      renderPrep(); renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderRun(); renderDash();
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+      renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1707,7 +1758,9 @@ function renderPrep(){
 
       prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
-      renderPrep(); renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderRun(); renderDash();
+      if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+      renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -2106,7 +2159,6 @@ function renderDash(){
   const doneOven = totalOven ? timerItems.filter(t => live && eMs >= t.doneOffsetMs).length : 0;
   const ovenPct = totalOven ? Math.round(doneOven/totalOven*100) : 0;
 
-  // FIX: remaining temp changes, not total
   const tempLeft = live
     ? tempChangeItems.filter(tc => tc.offsetMs > eMs).length
     : tempChangeItems.length;
@@ -2233,7 +2285,7 @@ function renderDash(){
         return;
       }
       window.__selectedScrubId = id;
-      renderDash(false);
+      renderDash();
     });
   });
 
