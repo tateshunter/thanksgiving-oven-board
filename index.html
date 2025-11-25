@@ -259,7 +259,7 @@ const DEFAULT_TIMELINE = [
   { time: "1:00 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
   { time: "1:45 PM", temp: 350, action: "put in", item: "crab dip phyllo cups", cookMin: 10, person: "" },
-  { time: "1:55–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
+  { time: "1:55 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
   { time: "2:45 PM", temp: 375, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10, person: "" },
   { time: "3:10 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
@@ -1992,11 +1992,16 @@ function renderDashScrubber(){
     const isServe = ev.action === "serve";
     const overdue = hasStarted() && ev.action==="put in" && eMs > ev.offsetMs;
 
-    const dotClass = isServe
-      ? "bg-amber-300"
-      : isTemp
-        ? "bg-sky-400"
-        : "bg-emerald-400";
+    const isFlex = ev.action === "flex / oven off";
+
+const dotClass = isServe
+  ? "bg-amber-300"     // serve
+  : isTemp
+    ? "bg-sky-400"     // temp change
+    : isFlex
+      ? "bg-violet-400" // flex window (own color dot)
+      : "bg-emerald-400"; // normal actions (put in, reheat, etc.)
+
 
     const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
     const selectedClass = ev.id === selectedId ? "ring-2 ring-white/90" : "";
