@@ -180,6 +180,32 @@ Set table"></textarea>
 
   </div>
 
+  <!-- GLOBAL ALARM OVERLAY -->
+  <div id="global-alarm-overlay"
+       class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/60 p-4">
+    <div class="w-full max-w-xl bg-neutral-950 border border-rose-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-rose-300">timer alert</div>
+          <div class="text-lg font-semibold mt-1">Something is ready to come out</div>
+          <div class="text-sm text-neutral-400">This pops up no matter which tab you're on.</div>
+        </div>
+        <button id="global-alarm-close"
+                class="text-neutral-400 hover:text-white text-xl leading-none"
+                title="close">✕</button>
+      </div>
+
+      <div id="global-alarm-list" class="space-y-2"></div>
+
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button id="global-alarm-goto-run"
+                class="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 rounded-lg px-3 py-2 text-sm">
+          Go to Oven Timers
+        </button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ---------------------------
    DATA + HELPERS
@@ -342,23 +368,48 @@ let activeDelay = null;
 let audioCtx = null;
 let alarmInterval = null;
 
+// Optional iOS fallback beep (tiny wav)
+const fallbackBeep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
+fallbackBeep.volume = 0.25;
+
 function ensureAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch(()=>{});
+  }
 }
+
+function unlockAudioOnFirstGesture(){
+  const unlock = () => {
+    ensureAudio();
+    window.removeEventListener("touchstart", unlock);
+    window.removeEventListener("click", unlock);
+  };
+  window.addEventListener("touchstart", unlock, { once:true });
+  window.addEventListener("click", unlock, { once:true });
+}
+unlockAudioOnFirstGesture();
 
 function startGlobalAlarm() {
   ensureAudio();
   if (alarmInterval) return;
 
   const beepOnce = () => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.15;
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.18);
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.15;
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    } catch {
+      fallbackBeep.currentTime = 0;
+      fallbackBeep.play().catch(()=>{});
+    }
   };
 
   beepOnce();
@@ -502,6 +553,12 @@ const btnDashRefresh = document.getElementById("btn-dash-refresh");
 
 const btnSave = document.getElementById("btn-save");
 const btnClearAll = document.getElementById("btn-clear-all");
+
+// Global alarm overlay refs
+const globalAlarmOverlay = document.getElementById("global-alarm-overlay");
+const globalAlarmList = document.getElementById("global-alarm-list");
+const globalAlarmClose = document.getElementById("global-alarm-close");
+const globalAlarmGotoRun = document.getElementById("global-alarm-goto-run");
 
 /* ---------------------------
    PLAN TABLE
@@ -660,7 +717,7 @@ function rebuildTimers() {
   const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
   if (!parseableTimes.length) {
     timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
-    renderRun(); renderDash();
+    renderRun(); renderDash(); renderGlobalAlarmOverlay();
     return;
   }
   anchorMin = Math.min(...parseableTimes);
@@ -690,7 +747,7 @@ function rebuildTimers() {
     ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
     : finalDoneOffsetMs;
 
-  renderRun(); renderDash();
+  renderRun(); renderDash(); renderGlobalAlarmOverlay();
 }
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
@@ -704,6 +761,7 @@ function acknowledgeDone(id){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -750,7 +808,7 @@ function pauseTimelineForItem(itemId){
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); saveState(true);
+  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -773,7 +831,68 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); saveState(true);
+  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+}
+
+/* Global alarm overlay */
+function renderGlobalAlarmOverlay(){
+  if(!globalAlarmOverlay || !globalAlarmList) return;
+
+  const overdueActive = timerItems.filter(it => {
+    const overdue = (elapsedMs() >= it.doneOffsetMs);
+    const isDone = acknowledgedDoneIds.has(it.id);
+    const isDelayed = activeDelay && activeDelay.itemId === it.id;
+    return overdue && !isDone && !isDelayed;
+  });
+
+  if(!overdueActive.length){
+    globalAlarmOverlay.classList.add("hidden");
+    globalAlarmOverlay.classList.remove("flex");
+    return;
+  }
+
+  globalAlarmOverlay.classList.remove("hidden");
+  globalAlarmOverlay.classList.add("flex");
+
+  globalAlarmList.innerHTML = overdueActive.map(it => `
+    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 flex items-center justify-between gap-3">
+      <div>
+        <div class="text-sm font-semibold">${titleCase(it.item || "(Unnamed Dish)")}</div>
+        <div class="text-xs text-neutral-400">
+          Planned: ${it.plannedTime} • Cook ${it.cookMin} min
+          ${it.temp==="—"?"":" • "+it.temp+"°F"}
+          ${it.person?` • 👤 ${titleCase(it.person)}`:""}
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          data-global-ack="${it.id}"
+        >Item done</button>
+
+        <button
+          class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          data-global-delay="${it.id}"
+        >Need more time</button>
+      </div>
+    </div>
+  `).join("");
+
+  globalAlarmList.querySelectorAll("[data-global-ack]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-global-ack");
+      finishDelayedItem(id);
+      renderGlobalAlarmOverlay();
+    });
+  });
+
+  globalAlarmList.querySelectorAll("[data-global-delay]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-global-delay");
+      pauseTimelineForItem(id);
+      renderGlobalAlarmOverlay();
+    });
+  });
 }
 
 function renderRun(){
@@ -829,7 +948,7 @@ function renderRun(){
       </div>`;
   }
 
-  if(!timerItems.length){ noTimers.classList.remove("hidden"); return; }
+  if(!timerItems.length){ noTimers.classList.remove("hidden"); renderGlobalAlarmOverlay(); return; }
   noTimers.classList.add("hidden");
 
   const eMs = elapsedMs();
@@ -843,7 +962,6 @@ function renderRun(){
     const isDelayedCard = activeDelay && activeDelay.itemId === it.id;
     const extraMs = isDelayedCard ? (Date.now() - activeDelay.startTs) : 0;
 
-    // alarm only when overdue + not done + not currently delaying
     const needsAlarm = overdue && !isDone && !isDelayedCard;
     if (needsAlarm) alarmActiveIds.add(it.id);
     else alarmActiveIds.delete(it.id);
@@ -866,7 +984,6 @@ function renderRun(){
       statusText = "prep time left";
     }
 
-    // next temp reminder if done
     const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
     const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
 
@@ -957,9 +1074,12 @@ function renderRun(){
       pauseTimelineForItem(id);
     });
   });
+
+  renderGlobalAlarmOverlay();
 }
 
 function startRun(){
+  ensureAudio(); // prime iOS audio on gesture
   startedAtTs=Date.now();
   isRunning=true;
   pausedAtTs=null;
@@ -969,6 +1089,7 @@ function startRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -979,6 +1100,7 @@ function pauseRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -989,6 +1111,7 @@ function resumeRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1004,11 +1127,12 @@ function resetRun(){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 function startTicking(){
   stopTicking();
-  tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500);
+  tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderGlobalAlarmOverlay();},500);
 }
 function stopTicking(){
   if(tickInterval) clearInterval(tickInterval);
@@ -1051,6 +1175,7 @@ function seedPrepTasks(force=true){
 
   renderPrep();
   renderDash();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1062,7 +1187,7 @@ function addPrepTask(person, task){
   prepTasks.push({ id: uuid(), person: p, task: t, done:false, subtasks: [] });
 
   prepPersonInput.value=""; prepTaskInput.value="";
-  renderPrep(); renderDash(); saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function getAllKnownPeople(){
@@ -1111,7 +1236,7 @@ function addPrepTasksBulk(){
   prepBulkPersonNewInput.value = "";
   prepBulkTasksTextarea.value = "";
 
-  renderPrep(); renderDash(); saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function addSubtask(parentTaskId, text){
@@ -1127,7 +1252,7 @@ function addSubtask(parentTaskId, text){
     };
   });
 
-  renderPrep(); renderDash(); saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function toggleSubtaskDone(parentTaskId, subId, done){
@@ -1139,7 +1264,7 @@ function toggleSubtaskDone(parentTaskId, subId, done){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function deleteSubtask(parentTaskId, subId){
@@ -1149,7 +1274,7 @@ function deleteSubtask(parentTaskId, subId){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function renderPrep(){
@@ -1160,6 +1285,7 @@ function renderPrep(){
 
   if(!visibleTasks.length){
     prepContainer.innerHTML = `<div class="text-sm text-neutral-400">No prep tasks assigned yet. Add some above and include a person.</div>`;
+    renderGlobalAlarmOverlay();
     return;
   }
 
@@ -1252,7 +1378,7 @@ function renderPrep(){
       const id = chk.getAttribute("data-task-check");
       const done = e.target.checked;
       prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-      renderPrep(); renderDash(); saveState(true);
+      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1261,7 +1387,7 @@ function renderPrep(){
       e.preventDefault();
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-      renderPrep(); renderDash(); saveState(true);
+      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1274,7 +1400,7 @@ function renderPrep(){
 
       prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
-      renderPrep(); renderDash(); saveState(true);
+      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1303,6 +1429,8 @@ function renderPrep(){
       deleteSubtask(parentId, subId);
     });
   });
+
+  renderGlobalAlarmOverlay();
 }
 
 /* ---------------------------
@@ -1594,6 +1722,8 @@ function renderDash(){
       else openPeople.add(key);
     });
   });
+
+  renderGlobalAlarmOverlay();
 }
 
 /* ---------------------------
@@ -1617,6 +1747,7 @@ function setView(next){
   if(view==="run") renderRun();
   if(view==="dash") renderDash();
 
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1665,6 +1796,13 @@ btnClearAll.addEventListener("click",()=>{
   stopTicking();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
+
+// Global overlay controls
+globalAlarmClose.addEventListener("click", ()=>{
+  globalAlarmOverlay.classList.add("hidden");
+  globalAlarmOverlay.classList.remove("flex");
+});
+globalAlarmGotoRun.addEventListener("click", ()=>setView("run"));
 
 /* ---------------------------
    INIT
