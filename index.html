@@ -21,6 +21,44 @@
       animation: alarmFlash 1s infinite;
       border-color: rgba(239,68,68,0.7) !important;
     }
+
+    /* circle timer */
+    .circle-wrap {
+      width: 112px;
+      height: 112px;
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .circle-wrap svg {
+      transform: rotate(-90deg);
+    }
+    .circle-text {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+    .circle-sub {
+      font-size: .7rem;
+      font-weight: 600;
+      color: #9ca3af;
+      margin-top: -2px;
+    }
+
+    /* global alarm overlay */
+    #alarm-overlay.hidden { display: none; }
+    #alarm-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(2px);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
   </style>
 </head>
 <body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
@@ -139,6 +177,9 @@ Set table"></textarea>
           </div>
         </div>
 
+        <!-- NOW / NEXT OVEN PANEL -->
+        <div id="now-next-oven" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div id="final-countdown" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
           <div id="temp-changes" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-2"></div>
@@ -181,30 +222,24 @@ Set table"></textarea>
   </div>
 
   <!-- GLOBAL ALARM OVERLAY -->
-  <div id="global-alarm-overlay"
-       class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/60 p-4">
-    <div class="w-full max-w-xl bg-neutral-950 border border-rose-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3">
-      <div class="flex items-start justify-between gap-3">
+  <div id="alarm-overlay" class="hidden">
+    <div class="w-full max-w-xl bg-neutral-950 border border-red-700/60 rounded-3xl p-5 space-y-3 shadow-2xl">
+      <div class="flex items-start justify-between">
         <div>
-          <div class="text-xs uppercase tracking-widest text-rose-300">timer alert</div>
-          <div class="text-lg font-semibold mt-1">Something is ready to come out</div>
-          <div class="text-sm text-neutral-400">This pops up no matter which tab you're on.</div>
+          <div class="text-xs uppercase tracking-widest text-red-300">timer alert</div>
+          <div class="text-xl font-semibold mt-1">Something is done in the oven</div>
+          <div class="text-sm text-neutral-400 mt-1">This pops up no matter what tab you’re on.</div>
         </div>
-        <button id="global-alarm-close"
-                class="text-neutral-400 hover:text-white text-xl leading-none"
-                title="close">✕</button>
-      </div>
-
-      <div id="global-alarm-list" class="space-y-2"></div>
-
-      <div class="flex items-center justify-end gap-2 pt-1">
-        <button id="global-alarm-goto-run"
-                class="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 rounded-lg px-3 py-2 text-sm">
-          Go to Oven Timers
+        <button id="alarm-overlay-close"
+                class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs hover:bg-neutral-800 transition">
+          hide
         </button>
       </div>
+
+      <div id="alarm-overlay-list" class="space-y-2"></div>
     </div>
   </div>
+
 
 <script>
 /* ---------------------------
@@ -339,6 +374,45 @@ function taskTotals(tasksArr){
   };
 }
 
+/* circle timer helpers */
+function circleTimerSVG({ percentRemaining, mainText, subText }) {
+  const radius = 46;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.min(1, Math.max(0, percentRemaining));
+  const dash = circumference * clamped;
+
+  return `
+    <div class="circle-wrap">
+      <svg width="112" height="112" viewBox="0 0 112 112">
+        <circle cx="56" cy="56" r="${radius}"
+                fill="none"
+                stroke="#1f2937"
+                stroke-width="10"/>
+        <circle cx="56" cy="56" r="${radius}"
+                fill="none"
+                stroke="#76ba43"
+                stroke-width="10"
+                stroke-linecap="round"
+                stroke-dasharray="${dash} ${circumference - dash}"/>
+      </svg>
+      <div class="circle-text">
+        <div class="text-center leading-tight">
+          <div>${mainText}</div>
+          <div class="circle-sub">${subText}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function fmtCircleText(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m >= 60) return fmtCountdownHours(ms);
+  return `${m}:${String(sec).padStart(2,"0")}`;
+}
+
 /* ---------------------------
    STATE
 ----------------------------*/
@@ -357,49 +431,37 @@ let prepTasks = [];
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
 
-// NEW: track which "put in" chimes have already fired
+let activeDelay = null; // { itemId, startTs }
+
 let chimeFiredInIds = new Set();
 
-let activeDelay = null; 
-// shape: { itemId: string, startTs: number }
-
 /* ---------------------------
-   AUDIO
+   AUDIO (global beep + chime)
 ----------------------------*/
 let audioCtx = null;
 let alarmInterval = null;
 
-// Optional iOS fallback beep (tiny wav)
-const fallbackBeep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
-fallbackBeep.volume = 0.25;
-
 function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function unlockAudioOnce() {
+  ensureAudio();
   if (audioCtx.state === "suspended") {
     audioCtx.resume().catch(()=>{});
   }
 }
+window.addEventListener("pointerdown", unlockAudioOnce, { once:true });
+window.addEventListener("touchstart", unlockAudioOnce, { once:true });
+window.addEventListener("keydown", unlockAudioOnce, { once:true });
 
-function unlockAudioOnFirstGesture(){
-  const unlock = () => {
-    ensureAudio();
-    window.removeEventListener("touchstart", unlock);
-    window.removeEventListener("click", unlock);
-  };
-  window.addEventListener("touchstart", unlock, { once:true });
-  window.addEventListener("click", unlock, { once:true });
-}
-unlockAudioOnFirstGesture();
-
-/* ---- DONE ALARM (beep beep) ---- */
 function startGlobalAlarm() {
   ensureAudio();
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(()=>{});
   if (alarmInterval) return;
 
   const beepOnce = () => {
-    try {
+    try{
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = "sine";
@@ -408,10 +470,7 @@ function startGlobalAlarm() {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.18);
-    } catch {
-      fallbackBeep.currentTime = 0;
-      fallbackBeep.play().catch(()=>{});
-    }
+    }catch(e){}
   };
 
   beepOnce();
@@ -424,32 +483,24 @@ function stopGlobalAlarmIfNoneActive() {
   alarmInterval = null;
 }
 
-/* ---- NEW: PUT-IN CHIME (pleasant ding) ---- */
-function playPutInChime() {
+function playPutInChime(){
   ensureAudio();
-  try {
-    // simple "ding-dong" two-tone chime
-    const now = audioCtx.currentTime;
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(()=>{});
 
-    const makeTone = (freq, start, dur, vol=0.18) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(vol, start + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(start);
-      osc.stop(start + dur + 0.02);
-    };
-
-    makeTone(1046.5, now, 0.35);      // C6
-    makeTone(783.99, now + 0.22, 0.45); // G5
-  } catch {
-    fallbackBeep.currentTime = 0;
-    fallbackBeep.play().catch(()=>{});
-  }
+  const now = audioCtx.currentTime;
+  const freqs = [523.25, 659.25, 783.99]; // C5 E5 G5
+  freqs.forEach((f, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(0.0001, now + i*0.08);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + i*0.08 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + i*0.08 + 0.28);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + i*0.08);
+    osc.stop(now + i*0.08 + 0.32);
+  });
 }
 
 /* ---------------------------
@@ -470,7 +521,7 @@ function saveState(silent=false) {
       view,
       sortAsc,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
-      chimeFiredInIds: [...chimeFiredInIds],   // NEW
+      chimeFiredInIds: [...chimeFiredInIds],
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -511,8 +562,6 @@ function loadState() {
     if (Array.isArray(data.acknowledgedDoneIds)) {
       acknowledgedDoneIds = new Set(data.acknowledgedDoneIds);
     }
-
-    // NEW
     if (Array.isArray(data.chimeFiredInIds)) {
       chimeFiredInIds = new Set(data.chimeFiredInIds);
     }
@@ -568,6 +617,7 @@ const noTimers = document.getElementById("no-timers");
 const timersGrid = document.getElementById("timers-grid");
 const finalCountdownBox = document.getElementById("final-countdown");
 const tempChangesBox = document.getElementById("temp-changes");
+const nowNextOvenBox = document.getElementById("now-next-oven");
 
 const prepContainer = document.getElementById("prep-container");
 const prepPersonInput = document.getElementById("prep-person");
@@ -590,11 +640,9 @@ const btnDashRefresh = document.getElementById("btn-dash-refresh");
 const btnSave = document.getElementById("btn-save");
 const btnClearAll = document.getElementById("btn-clear-all");
 
-// Global alarm overlay refs
-const globalAlarmOverlay = document.getElementById("global-alarm-overlay");
-const globalAlarmList = document.getElementById("global-alarm-list");
-const globalAlarmClose = document.getElementById("global-alarm-close");
-const globalAlarmGotoRun = document.getElementById("global-alarm-goto-run");
+const alarmOverlay = document.getElementById("alarm-overlay");
+const alarmOverlayList = document.getElementById("alarm-overlay-list");
+const alarmOverlayClose = document.getElementById("alarm-overlay-close");
 
 /* ---------------------------
    PLAN TABLE
@@ -753,7 +801,7 @@ function rebuildTimers() {
   const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
   if (!parseableTimes.length) {
     timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
-    renderRun(); renderDash(); renderGlobalAlarmOverlay();
+    renderRun(); renderDash();
     return;
   }
   anchorMin = Math.min(...parseableTimes);
@@ -783,7 +831,7 @@ function rebuildTimers() {
     ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
     : finalDoneOffsetMs;
 
-  renderRun(); renderDash(); renderGlobalAlarmOverlay();
+  renderRun(); renderDash();
 }
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
@@ -797,7 +845,6 @@ function acknowledgeDone(id){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -837,11 +884,10 @@ function pauseTimelineForItem(itemId){
   }
 
   startTicking();
-
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -861,70 +907,72 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); saveState(true);
 }
 
-/* Global alarm overlay */
+/* GLOBAL alarm overlay rendering */
 function renderGlobalAlarmOverlay(){
-  if(!globalAlarmOverlay || !globalAlarmList) return;
+  if(!alarmOverlay || !alarmOverlayList) return;
 
-  const overdueActive = timerItems.filter(it => {
-    const overdue = (elapsedMs() >= it.doneOffsetMs);
+  // items that are overdue and not acknowledged
+  const eMs = elapsedMs();
+  const overdue = timerItems.filter(it=>{
+    const untilDoneMs = it.doneOffsetMs - eMs;
     const isDone = acknowledgedDoneIds.has(it.id);
     const isDelayed = activeDelay && activeDelay.itemId === it.id;
-    return overdue && !isDone && !isDelayed;
+    return untilDoneMs <= 0 && !isDone && !isDelayed;
   });
 
-  if(!overdueActive.length){
-    globalAlarmOverlay.classList.add("hidden");
-    globalAlarmOverlay.classList.remove("flex");
+  if(!overdue.length){
+    alarmOverlay.classList.add("hidden");
     return;
   }
 
-  globalAlarmOverlay.classList.remove("hidden");
-  globalAlarmOverlay.classList.add("flex");
+  alarmOverlay.classList.remove("hidden");
 
-  globalAlarmList.innerHTML = overdueActive.map(it => `
-    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 flex items-center justify-between gap-3">
-      <div>
-        <div class="text-sm font-semibold">${titleCase(it.item || "(Unnamed Dish)")}</div>
+  alarmOverlayList.innerHTML = overdue.map(it=>{
+    return `
+      <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 space-y-2">
+        <div class="text-base font-semibold">${titleCase(it.item||"(Unnamed Dish)")}</div>
         <div class="text-xs text-neutral-400">
-          Planned: ${it.plannedTime} • Cook ${it.cookMin} min
-          ${it.temp==="—"?"":" • "+it.temp+"°F"}
+          Planned: ${it.plannedTime} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
           ${it.person?` • 👤 ${titleCase(it.person)}`:""}
         </div>
+        <div class="flex items-center gap-2">
+          <button
+            class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+            data-ack="${it.id}"
+          >Item done</button>
+          <button
+            class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+            data-delay="${it.id}"
+          >Pause cook (need more time)</button>
+        </div>
       </div>
-      <div class="flex items-center gap-2 shrink-0">
-        <button
-          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
-          data-global-ack="${it.id}"
-        >Item done</button>
+    `;
+  }).join("");
 
-        <button
-          class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
-          data-global-delay="${it.id}"
-        >Need more time</button>
-      </div>
-    </div>
-  `).join("");
-
-  globalAlarmList.querySelectorAll("[data-global-ack]").forEach(btn=>{
+  alarmOverlayList.querySelectorAll("[data-ack]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-global-ack");
+      const id = btn.getAttribute("data-ack");
       finishDelayedItem(id);
-      renderGlobalAlarmOverlay();
     });
   });
 
-  globalAlarmList.querySelectorAll("[data-global-delay]").forEach(btn=>{
+  alarmOverlayList.querySelectorAll("[data-delay]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-global-delay");
+      const id = btn.getAttribute("data-delay");
       pauseTimelineForItem(id);
-      renderGlobalAlarmOverlay();
     });
   });
 }
 
+alarmOverlayClose?.addEventListener("click", ()=>{
+  // hide just visually; alarm keeps beeping until acknowledged
+  alarmOverlay.classList.add("hidden");
+});
+
+/* RUN rendering */
 function renderRun(){
   btnRunReset.classList.toggle("hidden", !startedAtTs);
   btnRunPause.classList.toggle("hidden", !(startedAtTs && isRunning));
@@ -936,6 +984,94 @@ function renderRun(){
     : "Not started";
 
   timersGrid.innerHTML = "";
+
+  // NOW / NEXT OVEN PANEL
+  if (nowNextOvenBox) {
+    if (!startedAtTs || !timerItems.length) {
+      nowNextOvenBox.innerHTML = `
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 text-sm text-neutral-400">
+          Start cook to see “in oven now” status.
+        </div>
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 text-sm text-neutral-400">
+          Start cook to see “next item in” countdown.
+        </div>
+      `;
+    } else {
+      const eMs = elapsedMs();
+
+      const inOvenNow = timerItems.filter(it=>{
+        const prepLeftMs = it.inOffsetMs - eMs;
+        const untilDoneMs = it.doneOffsetMs - eMs;
+        return prepLeftMs <= 0 && untilDoneMs > 0;
+      });
+
+      const nextItem = timerItems.find(it => (it.inOffsetMs - eMs) > 0) || null;
+
+      const inOvenHTML = inOvenNow.length ? inOvenNow.map(it=>{
+        const untilDoneMs = it.doneOffsetMs - eMs;
+        const totalCookMs = it.cookMin * 60000;
+        const percentRemaining = totalCookMs > 0 ? (untilDoneMs / totalCookMs) : 0;
+
+        return `
+          <div class="flex items-center gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+            ${circleTimerSVG({
+              percentRemaining,
+              mainText: fmtCircleText(untilDoneMs),
+              subText: "left"
+            })}
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate">${titleCase(it.item||"(Unnamed Dish)")}</div>
+              <div class="text-xs text-neutral-400 mt-0.5">
+                Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
+                ${it.person?` • 👤 ${titleCase(it.person)}`:""}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("") : `
+        <div class="text-sm text-neutral-400">Nothing in the oven right now.</div>
+      `;
+
+      let nextHTML = `
+        <div class="text-sm text-neutral-400">No more timed “put in” items left.</div>
+      `;
+      if (nextItem) {
+        const untilInMs = nextItem.inOffsetMs - eMs;
+        const totalToInMs = Math.max(1, nextItem.inOffsetMs);
+        const percentRemaining = untilInMs / totalToInMs;
+
+        nextHTML = `
+          <div class="flex items-center gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+            ${circleTimerSVG({
+              percentRemaining,
+              mainText: fmtCircleText(untilInMs),
+              subText: "until in"
+            })}
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate">${titleCase(nextItem.item||"(Unnamed Dish)")}</div>
+              <div class="text-xs text-neutral-400 mt-0.5">
+                Planned: ${nextItem.plannedTime} • Cook ${nextItem.cookMin} min
+                ${nextItem.temp==="—"?"":" • "+nextItem.temp+"°F"}
+                ${nextItem.person?` • 👤 ${titleCase(nextItem.person)}`:""}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      nowNextOvenBox.innerHTML = `
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+          <div class="text-xs uppercase tracking-widest text-neutral-500">in oven now</div>
+          <div class="space-y-2">${inOvenHTML}</div>
+        </div>
+
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+          <div class="text-xs uppercase tracking-widest text-neutral-500">next item in</div>
+          ${nextHTML}
+        </div>
+      `;
+    }
+  }
 
   if(!startedAtTs || finalDoneOffsetMs==null){
     finalCountdownBox.innerHTML = `
@@ -969,7 +1105,7 @@ function renderRun(){
       ${tempChangeItems.map(tc=>{
         const rem = tc.offsetMs - eMs;
         const due = rem<=0;
-        const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : "—";
+        const tempText = tc.targetTemp ? ${"`"}${tc.targetTemp}°F${"`"} : "—";
         return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
           <div><div class="text-sm font-medium">Set temp → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
           <div class="text-sm font-semibold ${due?"text-amber-300":"text-neutral-100"}">${due?"NOW":fmtCountdownHours(rem)}</div>
@@ -983,9 +1119,9 @@ function renderRun(){
 
   const eMs = elapsedMs();
 
-  // NEW: fire chime right when it's time to "put in"
+  // chime at "put in" moment
   timerItems.forEach(it => {
-    const dueToPutIn = eMs >= it.inOffsetMs; // we've reached planned "put in" time
+    const dueToPutIn = eMs >= it.inOffsetMs;
     const alreadyChimed = chimeFiredInIds.has(it.id);
     const isDelayed = activeDelay && activeDelay.itemId === it.id;
 
@@ -1123,18 +1259,16 @@ function renderRun(){
 }
 
 function startRun(){
-  ensureAudio();
   startedAtTs=Date.now();
   isRunning=true;
   pausedAtTs=null;
   pausedAccumMs=0;
   activeDelay=null;
-  chimeFiredInIds.clear(); // NEW: reset chimes on fresh start
+  chimeFiredInIds.clear();
   setView("run");
   startTicking();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1145,7 +1279,6 @@ function pauseRun(){
   startTicking();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1156,7 +1289,6 @@ function resumeRun(){
   startTicking();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1169,16 +1301,15 @@ function resetRun(){
   activeDelay=null;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
-  chimeFiredInIds.clear(); // NEW
+  chimeFiredInIds.clear();
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 function startTicking(){
   stopTicking();
-  tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderGlobalAlarmOverlay();},500);
+  tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500);
 }
 function stopTicking(){
   if(tickInterval) clearInterval(tickInterval);
@@ -1221,7 +1352,6 @@ function seedPrepTasks(force=true){
 
   renderPrep();
   renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1233,7 +1363,7 @@ function addPrepTask(person, task){
   prepTasks.push({ id: uuid(), person: p, task: t, done:false, subtasks: [] });
 
   prepPersonInput.value=""; prepTaskInput.value="";
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function getAllKnownPeople(){
@@ -1282,7 +1412,7 @@ function addPrepTasksBulk(){
   prepBulkPersonNewInput.value = "";
   prepBulkTasksTextarea.value = "";
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function addSubtask(parentTaskId, text){
@@ -1298,7 +1428,7 @@ function addSubtask(parentTaskId, text){
     };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function toggleSubtaskDone(parentTaskId, subId, done){
@@ -1310,7 +1440,7 @@ function toggleSubtaskDone(parentTaskId, subId, done){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function deleteSubtask(parentTaskId, subId){
@@ -1320,7 +1450,7 @@ function deleteSubtask(parentTaskId, subId){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); saveState(true);
 }
 
 function renderPrep(){
@@ -1331,7 +1461,6 @@ function renderPrep(){
 
   if(!visibleTasks.length){
     prepContainer.innerHTML = `<div class="text-sm text-neutral-400">No prep tasks assigned yet. Add some above and include a person.</div>`;
-    renderGlobalAlarmOverlay();
     return;
   }
 
@@ -1424,7 +1553,7 @@ function renderPrep(){
       const id = chk.getAttribute("data-task-check");
       const done = e.target.checked;
       prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
 
@@ -1433,7 +1562,7 @@ function renderPrep(){
       e.preventDefault();
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
 
@@ -1446,7 +1575,7 @@ function renderPrep(){
 
       prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
 
@@ -1475,8 +1604,6 @@ function renderPrep(){
       deleteSubtask(parentId, subId);
     });
   });
-
-  renderGlobalAlarmOverlay();
 }
 
 /* ---------------------------
@@ -1843,13 +1970,6 @@ btnClearAll.addEventListener("click",()=>{
   stopTicking();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
-
-// Global overlay controls
-globalAlarmClose.addEventListener("click", ()=>{
-  globalAlarmOverlay.classList.add("hidden");
-  globalAlarmOverlay.classList.remove("flex");
-});
-globalAlarmGotoRun.addEventListener("click", ()=>setView("run"));
 
 /* ---------------------------
    INIT
