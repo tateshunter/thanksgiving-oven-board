@@ -9,7 +9,7 @@
   <style>
     html, body { height: 100%; }
     .bar { height: 10px; border-radius: 999px; background: #1f2937; overflow: hidden; }
-    .bar > div { height: 100%; background: #76ba43; }
+    .bar > div { height: 100%; background: #76ba43; transition: width .35s ease; }
     .derived-cell { color: #cbd5e1; font-weight: 600; }
     .derived-muted { color: #6b7280; }
 
@@ -22,9 +22,26 @@
       border-color: rgba(239,68,68,0.7) !important;
     }
 
-    /* dashboard scrubber touch polish */
-    #dash-bars button[data-scrub-id]{
+    #dash-bars button[data-scrub-id],
+    #data-tab button[data-scrub-id]{
       touch-action: manipulation;
+    }
+
+    /* small view enter animation */
+    .view-enter { animation: viewEnter .18s ease-out; }
+    @keyframes viewEnter {
+      from { opacity: 0; transform: translateY(6px) scale(.99); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    body.cooking {
+      background-size: 200% 200%;
+      animation: bgDrift 12s ease-in-out infinite;
+    }
+    @keyframes bgDrift {
+      0% { background-position: 0% 30%; }
+      50% { background-position: 100% 70%; }
+      100% { background-position: 0% 30%; }
     }
   </style>
 </head>
@@ -39,14 +56,15 @@
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
-        <button id="btn-save" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">💾 Save</button>
-        <button id="btn-clear-all" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-red-900/40 hover:border-red-700 transition">🧨 Clear all data</button>
+        <button id="btn-save" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">💾 Save</button>
+        <button id="btn-clear-all" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-red-900/40 hover:border-red-700 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">🧨 Clear all data</button>
 
         <div class="inline-flex bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-2xl p-1 shadow-sm flex-wrap">
           <button id="tab-plan" class="px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white">Plan</button>
           <button id="tab-prep" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Prep Board</button>
           <button id="tab-run"  class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Oven Timers</button>
           <button id="tab-dash" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Dashboard</button>
+          <button id="tab-data" class="px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white">Data</button>
         </div>
       </div>
     </header>
@@ -56,10 +74,10 @@
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div class="text-sm text-neutral-400">Edit rows to match your exact plan. For “Set oven temp,” use the Oven Temp column.</div>
         <div class="flex items-center gap-2 flex-wrap">
-          <button id="btn-sort-time" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">↕ Sort by time</button>
-          <button id="btn-add-row" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">➕ Add row</button>
-          <button id="btn-reset-template" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Reset template</button>
-          <button id="btn-start-cook" class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold inline-flex items-center gap-2 transition shadow">▶ Start Cook</button>
+          <button id="btn-sort-time" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">↕ Sort by time</button>
+          <button id="btn-add-row" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">➕ Add row</button>
+          <button id="btn-reset-template" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Reset template</button>
+          <button id="btn-start-cook" class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold inline-flex items-center gap-2 transition shadow hover:-translate-y-[1px] active:translate-y-0">▶ Start Cook</button>
         </div>
       </div>
 
@@ -91,14 +109,14 @@
             <div class="text-lg font-semibold">Tasks by person</div>
             <div class="text-sm text-neutral-400">Auto-seeded from your plan (only when a person is assigned). Add anything else you need.</div>
           </div>
-          <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Re-seed from plan</button>
+          <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Re-seed from plan</button>
         </div>
 
         <!-- Single task add -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
           <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
           <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
-          <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">Add prep task</button>
+          <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition hover:-translate-y-[1px] active:translate-y-0">Add prep task</button>
         </div>
 
         <!-- Bulk add -->
@@ -120,7 +138,7 @@ Make gravy
 Set table"></textarea>
 
           <button id="btn-prep-bulk-add"
-            class="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">
+            class="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition hover:-translate-y-[1px] active:translate-y-0">
             Add all tasks to this person
           </button>
 
@@ -167,7 +185,7 @@ Set table"></textarea>
             <div class="text-lg font-semibold">Overall status</div>
             <div class="text-sm text-neutral-400">One glance view of prep + oven progress.</div>
           </div>
-          <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Refresh</button>
+          <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Refresh</button>
         </div>
 
         <div id="dash-now-next" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
@@ -180,6 +198,39 @@ Set table"></textarea>
         <div id="dash-bars" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-4"></div>
 
         <div id="dash-by-person" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- DATA VIEW -->
+    <section id="view-data" class="space-y-4 hidden">
+      <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-neutral-500">data</div>
+            <div class="text-lg font-semibold">Cook analytics</div>
+            <div class="text-sm text-neutral-400">Visual breakdown of oven flow, temps, and load.</div>
+          </div>
+          <button id="btn-data-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0">Refresh charts</button>
+        </div>
+
+        <div id="data-summary" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+            <div class="text-xs uppercase tracking-widest text-neutral-500">oven gantt</div>
+            <div id="data-gantt" class="w-full overflow-x-auto"></div>
+          </div>
+
+          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+            <div class="text-xs uppercase tracking-widest text-neutral-500">oven load</div>
+            <div id="data-load" class="w-full overflow-x-auto"></div>
+          </div>
+        </div>
+
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+          <div class="text-xs uppercase tracking-widest text-neutral-500">temperature schedule</div>
+          <div id="data-temps" class="w-full overflow-x-auto"></div>
+        </div>
       </div>
     </section>
 
@@ -452,7 +503,7 @@ function playPutInChime() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v8";
+const STORAGE_KEY = "thanksgiving-oven-board:v9";
 
 function saveState(silent=false) {
   try {
@@ -541,11 +592,13 @@ const tabPlan = document.getElementById("tab-plan");
 const tabPrep = document.getElementById("tab-prep");
 const tabRun  = document.getElementById("tab-run");
 const tabDash = document.getElementById("tab-dash");
+const tabData = document.getElementById("tab-data");
 
 const viewPlan = document.getElementById("view-plan");
 const viewPrep = document.getElementById("view-prep");
 const viewRun  = document.getElementById("view-run");
 const viewDash = document.getElementById("view-dash");
+const viewData = document.getElementById("view-data");
 
 const tbody = document.getElementById("timeline-tbody");
 
@@ -582,6 +635,12 @@ const dashNumbers = document.getElementById("dash-numbers");
 const dashBars = document.getElementById("dash-bars");
 const dashByPerson = document.getElementById("dash-by-person");
 const btnDashRefresh = document.getElementById("btn-dash-refresh");
+
+const dataSummary = document.getElementById("data-summary");
+const dataGantt = document.getElementById("data-gantt");
+const dataLoad = document.getElementById("data-load");
+const dataTemps = document.getElementById("data-temps");
+const btnDataRefresh = document.getElementById("btn-data-refresh");
 
 const btnSave = document.getElementById("btn-save");
 const btnClearAll = document.getElementById("btn-clear-all");
@@ -631,7 +690,7 @@ function renderPlan() {
     tdTemp.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${tempOptions}</select>`;
     tdTemp.querySelector("select").addEventListener("change", (e) => {
       r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10);
-      rebuildTimers(); saveState(true);
+      rebuildTimers(); seedPrepTasks(false); saveState(true);
       renderPlan();
     });
 
@@ -662,7 +721,10 @@ function renderPlan() {
       rebuildTimers(); saveState(true);
     });
     cookInput.addEventListener("blur", () => {
+      const v = cookInput.value.trim();
+      r.cookMin = v==="—" || v==="" ? "—" : Number(v);
       renderPlan();
+      rebuildTimers();
       saveState(true);
     });
 
@@ -698,7 +760,7 @@ function renderPlan() {
     tdDel.querySelector("button").addEventListener("click", () => {
       timeline = timeline.filter(x => x.id !== r.id);
       prepTasks = prepTasks.filter(t => t.sourceRowId !== r.id);
-      renderPlan(); rebuildTimers(); renderPrep(); renderDash(); saveState(true);
+      renderPlan(); rebuildTimers(); seedPrepTasks(false); renderPrep(); renderDash(); renderData(); saveState(true);
     });
 
     tr.append(tdTime, tdTemp, tdAction, tdItem, tdCook, tdTakeOut, tdPerson, tdDel);
@@ -731,8 +793,9 @@ function sortTimelineByTime() {
 const TEMP_CHANGE_ACTIONS = new Set(["set oven temp"]);
 
 function isTimedPutIn(row) {
-  const hasNumericCook = typeof row.cookMin === "number" || /[0-9]/.test(String(row.cookMin));
-  return row.action === "put in" && hasNumericCook && parseTimeToMinutes(row.time) != null;
+  return row.action === "put in"
+    && Number.isFinite(row.cookMin)
+    && parseTimeToMinutes(row.time) != null;
 }
 function isTempChange(row) {
   return TEMP_CHANGE_ACTIONS.has(row.action) && parseTimeToMinutes(row.time) != null;
@@ -748,14 +811,14 @@ function rebuildTimers() {
   const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
   if (!parseableTimes.length) {
     timerItems=[]; tempChangeItems=[]; anchorMin=null; finalDoneOffsetMs=null; dinnerOffsetMs=null;
-    renderRun(); renderDash(); renderGlobalAlarmOverlay();
+    renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();
     return;
   }
   anchorMin = Math.min(...parseableTimes);
 
   timerItems = timeline.filter(isTimedPutIn).map(r => {
     const plannedMin = parseTimeToMinutes(r.time);
-    const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
+    const dur = Number(r.cookMin);
     const inOffsetMin = plannedMin - anchorMin;
     const doneOffsetMin = inOffsetMin + dur;
     return {
@@ -773,12 +836,17 @@ function rebuildTimers() {
     return { id:r.id, time:r.time, action:r.action, item:r.item, targetTemp, offsetMs: offsetMin*60000 };
   }).sort((a,b)=>a.offsetMs-b.offsetMs);
 
-  const serveRow = timeline.find(r => r.action === "serve" && parseTimeToMinutes(r.time)!=null);
+  // fix: robust serve lookup so dinner countdown updates when plan changes
+  const serveRow = timeline.find(r =>
+    String(r.action||"").toLowerCase().trim()==="serve" &&
+    parseTimeToMinutes(r.time)!=null
+  );
+
   dinnerOffsetMs = serveRow
     ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
     : finalDoneOffsetMs;
 
-  renderRun(); renderDash(); renderGlobalAlarmOverlay();
+  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();
 }
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
@@ -792,6 +860,7 @@ function acknowledgeDone(id){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -837,7 +906,7 @@ function pauseTimelineForItem(itemId){
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -857,7 +926,7 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 /* Global alarm overlay */
@@ -1028,10 +1097,10 @@ function renderRun(){
 
     const card = document.createElement("div");
     card.dataset.cardId = it.id;
-    card.className = "border rounded-2xl p-4 space-y-3 " + (
+    card.className = "border rounded-2xl p-4 space-y-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-emerald-500/10 hover:border-neutral-700 " + (
       isDone
         ? "bg-emerald-500/10 border-emerald-500/40"
-        : "bg-neutral-950 border-neutral-800"
+        : "bg-neutral-950 border-neutral-800 shadow-lg shadow-black/30"
     );
     if (needsAlarm) card.classList.add("alarm-tile");
 
@@ -1120,6 +1189,7 @@ function renderRun(){
 
 function startRun(){
   ensureAudio();
+  document.body.classList.add("cooking");
   startedAtTs=Date.now();
   isRunning=true;
   pausedAtTs=null;
@@ -1130,6 +1200,7 @@ function startRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1141,6 +1212,7 @@ function pauseRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1152,12 +1224,14 @@ function resumeRun(){
   startTicking();
   renderRun();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
 
 function resetRun(){
   stopTicking();
+  document.body.classList.remove("cooking");
   startedAtTs=null;
   isRunning=false;
   pausedAtTs=null;
@@ -1169,13 +1243,14 @@ function resetRun(){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
 
 function startTicking(){
   stopTicking();
-  tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderGlobalAlarmOverlay();},500);
+  tickInterval=setInterval(()=>{renderRun(); renderDash(); renderData(); renderGlobalAlarmOverlay();},500);
 }
 
 function stopTicking(){
@@ -1232,6 +1307,7 @@ function seedPrepTasks(force=true){
 
   renderPrep();
   renderDash();
+  renderData();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -1244,7 +1320,7 @@ function addPrepTask(person, task){
   prepTasks.push({ id: uuid(), person: p, task: t, done:false, subtasks: [] });
 
   prepPersonInput.value=""; prepTaskInput.value="";
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function getAllKnownPeople(){
@@ -1293,7 +1369,7 @@ function addPrepTasksBulk(){
   prepBulkPersonNewInput.value = "";
   prepBulkTasksTextarea.value = "";
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function addSubtask(parentTaskId, text){
@@ -1309,7 +1385,7 @@ function addSubtask(parentTaskId, text){
     };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function toggleSubtaskDone(parentTaskId, subId, done){
@@ -1321,7 +1397,7 @@ function toggleSubtaskDone(parentTaskId, subId, done){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function deleteSubtask(parentTaskId, subId){
@@ -1331,7 +1407,7 @@ function deleteSubtask(parentTaskId, subId){
     return { ...pt, subtasks };
   });
 
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+  renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function renderPrep(){
@@ -1435,7 +1511,7 @@ function renderPrep(){
       const id = chk.getAttribute("data-task-check");
       const done = e.target.checked;
       prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1444,7 +1520,7 @@ function renderPrep(){
       e.preventDefault();
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1457,7 +1533,7 @@ function renderPrep(){
 
       prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); renderData(); renderGlobalAlarmOverlay(); saveState(true);
     });
   });
 
@@ -1648,7 +1724,7 @@ function renderDashNowNext(){
 }
 
 /* ---------------------------
-   DASHBOARD SCRUBBER (fixed for iPad)
+   DASHBOARD SCRUBBER
 ----------------------------*/
 function renderDashScrubber(){
   if(anchorMin == null){
@@ -1660,7 +1736,6 @@ function renderDashScrubber(){
     return `<div class="text-sm text-neutral-400">No scheduled events yet.</div>`;
   }
 
-  // persistent selected dot for tapping
   window.__selectedScrubId = window.__selectedScrubId || null;
   const selectedId = window.__selectedScrubId;
 
@@ -1668,7 +1743,6 @@ function renderDashScrubber(){
   const eMs = hasStarted() ? elapsedMs() : 0;
   const pctNow = Math.min(100, Math.max(0, (eMs / totalMs) * 100));
 
-  // lane packing to prevent overlaps
   const minGapPct = 6;
   const laneLastPct = [-Infinity, -Infinity, -Infinity];
   const laneOffsetsPx = [16, 30, 44];
@@ -1964,7 +2038,6 @@ function renderDash(){
     });
   });
 
-  // updated scrubber click: tap to select, tap again to jump to Run
   dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-scrub-id");
@@ -1973,7 +2046,7 @@ function renderDash(){
         return;
       }
       window.__selectedScrubId = id;
-      renderDash(false);
+      renderDash();
     });
   });
 
@@ -1981,14 +2054,269 @@ function renderDash(){
 }
 
 /* ---------------------------
+   DATA TAB CHARTS
+----------------------------*/
+function renderData(){
+  if(!dataSummary || !dataGantt || !dataLoad || !dataTemps) return;
+
+  const live = hasStarted();
+  const eMs = live ? elapsedMs() : 0;
+
+  const totalRange = (dinnerOffsetMs ?? finalDoneOffsetMs ?? 0);
+  const rangeMin = totalRange ? Math.round(totalRange/60000) : 0;
+
+  const ovenCount = timerItems.length;
+  const prepTotalsAll = taskTotals(prepTasks);
+  const prepPct = prepTotalsAll.grandTotal ? Math.round(prepTotalsAll.grandDone/prepTotalsAll.grandTotal*100) : 0;
+
+  dataSummary.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+        <div class="text-xs uppercase tracking-widest text-neutral-500">total planned span</div>
+        <div class="text-3xl font-semibold mt-1">${rangeMin ? rangeMin+" min" : "—"}</div>
+        <div class="text-xs text-neutral-400 mt-1">from first planned time to serve/final dish</div>
+      </div>
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+        <div class="text-xs uppercase tracking-widest text-neutral-500">oven dishes</div>
+        <div class="text-3xl font-semibold mt-1">${ovenCount}</div>
+        <div class="text-xs text-neutral-400 mt-1">timed “put in” items</div>
+      </div>
+      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+        <div class="text-xs uppercase tracking-widest text-neutral-500">prep completion</div>
+        <div class="text-3xl font-semibold mt-1">${prepPct}%</div>
+        <div class="text-xs text-neutral-400 mt-1">${prepTotalsAll.grandDone}/${prepTotalsAll.grandTotal} tasks + subtasks done</div>
+      </div>
+    </div>
+  `;
+
+  renderGanttChart(totalRange, eMs);
+  renderOvenLoadChart(totalRange, eMs);
+  renderTempScheduleChart(totalRange, eMs);
+}
+
+function renderGanttChart(totalRangeMs, eMs){
+  if(!totalRangeMs || !timerItems.length){
+    dataGantt.innerHTML = `<div class="text-sm text-neutral-400">Add timed “put in” rows to see an oven gantt.</div>`;
+    return;
+  }
+
+  const width = Math.max(900, totalRangeMs/60000*18);
+  const rowH = 26;
+  const padL = 90;
+  const padR = 18;
+  const padT = 18;
+
+  // lane pack to avoid overlaps
+  const lanes = [];
+  const items = timerItems.map(it=>({...it}));
+  items.forEach(it=>{
+    let lane = lanes.findIndex(endMs => it.inOffsetMs >= endMs);
+    if(lane < 0){ lane = lanes.length; lanes.push(0); }
+    lanes[lane] = it.doneOffsetMs;
+    it.lane = lane;
+  });
+
+  const height = padT + (lanes.length * rowH) + 28;
+  const nowX = padL + (Math.max(0, Math.min(totalRangeMs, eMs)) / totalRangeMs) * (width - padL - padR);
+
+  const blocks = items.map(it=>{
+    const x = padL + (it.inOffsetMs/totalRangeMs) * (width - padL - padR);
+    const w = Math.max(3, ((it.doneOffsetMs-it.inOffsetMs)/totalRangeMs) * (width - padL - padR));
+    const y = padT + it.lane*rowH;
+    const label = titleCase(it.item||"(unnamed)");
+    const tempLabel = it.temp==="—" ? "" : ` • ${it.temp}°F`;
+    const personLabel = it.person ? ` • ${titleCase(it.person)}` : "";
+    const isActive = eMs>=it.inOffsetMs && eMs<it.doneOffsetMs;
+    const isOver = eMs>=it.doneOffsetMs;
+    const fill = isOver ? "rgba(16,185,129,0.25)" : isActive ? "rgba(245,158,11,0.25)" : "rgba(99,102,241,0.18)";
+    const stroke = isOver ? "rgba(16,185,129,0.9)" : isActive ? "rgba(245,158,11,0.9)" : "rgba(99,102,241,0.7)";
+
+    return `
+      <g>
+        <rect x="${x}" y="${y}" rx="6" ry="6" width="${w}" height="18"
+              fill="${fill}" stroke="${stroke}" stroke-width="1.2"></rect>
+        <text x="${x+4}" y="${y+13}" font-size="10" fill="white">${label}</text>
+        <title>${label}${tempLabel}${personLabel} • ${it.plannedTime}</title>
+      </g>
+    `;
+  }).join("");
+
+  // time ticks every 30 minutes
+  const tickEveryMin = 30;
+  const tickCount = Math.floor((totalRangeMs/60000)/tickEveryMin)+1;
+  const ticks = Array.from({length: tickCount}, (_,i)=>{
+    const min = i*tickEveryMin;
+    const x = padL + (min*60000/totalRangeMs)*(width-padL-padR);
+    const timeLabel = timeStrFromMinutes(anchorMin + min);
+    return `
+      <g>
+        <line x1="${x}" y1="${padT-6}" x2="${x}" y2="${height-22}" stroke="rgba(255,255,255,0.06)"></line>
+        <text x="${x}" y="${height-8}" font-size="10" fill="rgba(255,255,255,0.5)" text-anchor="middle">${timeLabel}</text>
+      </g>
+    `;
+  }).join("");
+
+  dataGantt.innerHTML = `
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
+
+      ${ticks}
+
+      <line x1="${nowX}" y1="${padT-6}" x2="${nowX}" y2="${height-22}"
+            stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
+
+      ${blocks}
+
+      <text x="10" y="14" font-size="11" fill="rgba(255,255,255,0.6)">lanes auto-pack to show overlaps</text>
+    </svg>
+  `;
+}
+
+function renderOvenLoadChart(totalRangeMs, eMs){
+  if(!totalRangeMs || !timerItems.length){
+    dataLoad.innerHTML = `<div class="text-sm text-neutral-400">Add timed “put in” rows to see oven load.</div>`;
+    return;
+  }
+
+  const width = Math.max(900, totalRangeMs/60000*18);
+  const height = 220;
+  const padL = 44, padR = 18, padT = 18, padB = 28;
+
+  const events = [];
+  timerItems.forEach(t=>{
+    events.push({ t: t.inOffsetMs, delta: +1 });
+    events.push({ t: t.doneOffsetMs, delta: -1 });
+  });
+  events.sort((a,b)=>a.t-b.t);
+
+  let load=0;
+  const series=[{x:0,y:0}];
+  events.forEach(e=>{
+    load += e.delta;
+    series.push({ x: e.t, y: load });
+  });
+  series.push({ x: totalRangeMs, y: load });
+
+  const maxLoad = Math.max(1, ...series.map(p=>p.y));
+
+  const xScale = (ms)=> padL + (ms/totalRangeMs)*(width-padL-padR);
+  const yScale = (v)=> padT + (1 - v/maxLoad)*(height-padT-padB);
+
+  const stepPath = () => {
+    let d = `M ${xScale(series[0].x)} ${yScale(series[0].y)}`;
+    for(let i=1;i<series.length;i++){
+      const prev = series[i-1];
+      const cur = series[i];
+      d += ` L ${xScale(cur.x)} ${yScale(prev.y)} L ${xScale(cur.x)} ${yScale(cur.y)}`;
+    }
+    return d;
+  };
+
+  const areaPath = () => {
+    const top = stepPath();
+    const bottom = ` L ${xScale(totalRangeMs)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`;
+    return top + bottom;
+  };
+
+  const nowX = xScale(Math.max(0, Math.min(totalRangeMs, eMs)));
+
+  dataLoad.innerHTML = `
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
+
+      <path d="${areaPath()}" fill="rgba(16,185,129,0.18)"></path>
+      <path d="${stepPath()}" fill="none" stroke="rgba(16,185,129,0.9)" stroke-width="2"></path>
+
+      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${height-padB}"
+            stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
+
+      ${Array.from({length:maxLoad+1}, (_,i)=>{
+        const y = yScale(i);
+        return `
+          <line x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
+          <text x="${padL-8}" y="${y+4}" font-size="10" fill="rgba(255,255,255,0.6)" text-anchor="end">${i}</text>
+        `;
+      }).join("")}
+
+      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">dishes in oven over time</text>
+    </svg>
+  `;
+}
+
+function renderTempScheduleChart(totalRangeMs, eMs){
+  if(!totalRangeMs || !tempChangeItems.length){
+    dataTemps.innerHTML = `<div class="text-sm text-neutral-400">No temp change rows with parseable times yet.</div>`;
+    return;
+  }
+
+  const width = Math.max(900, totalRangeMs/60000*18);
+  const height = 220;
+  const padL = 54, padR = 18, padT = 18, padB = 28;
+
+  const tempsSeries = tempChangeItems
+    .filter(tc=>tc.targetTemp)
+    .map(tc=>({ x: tc.offsetMs, y: tc.targetTemp }))
+    .sort((a,b)=>a.x-b.x);
+
+  const minTemp = Math.min(...tempsSeries.map(p=>p.y), 300);
+  const maxTemp = Math.max(...tempsSeries.map(p=>p.y), 450);
+
+  const xScale = (ms)=> padL + (ms/totalRangeMs)*(width-padL-padR);
+  const yScale = (v)=> padT + (1 - (v-minTemp)/(maxTemp-minTemp || 1))*(height-padT-padB);
+
+  // step line
+  let d = `M ${xScale(0)} ${yScale(tempsSeries[0].y)}`;
+  tempsSeries.forEach((p,i)=>{
+    d += ` L ${xScale(p.x)} ${yScale(i===0?tempsSeries[0].y:tempsSeries[i-1].y)} L ${xScale(p.x)} ${yScale(p.y)}`;
+  });
+  d += ` L ${xScale(totalRangeMs)} ${yScale(tempsSeries[tempsSeries.length-1].y)}`;
+
+  const nowX = xScale(Math.max(0, Math.min(totalRangeMs, eMs)));
+
+  dataTemps.innerHTML = `
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
+
+      <path d="${d}" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="2.5"></path>
+
+      ${tempsSeries.map(p=>`
+        <circle cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="3.5" fill="rgba(56,189,248,1)"></circle>
+        <text x="${xScale(p.x)}" y="${yScale(p.y)-8}" font-size="10" fill="rgba(255,255,255,0.75)" text-anchor="middle">${p.y}°</text>
+      `).join("")}
+
+      <line x1="${nowX}" y1="${padT-2}" x2="${nowX}" y2="${height-padB}"
+            stroke="rgba(255,255,255,0.9)" stroke-width="2"></line>
+
+      ${Array.from({length:5}, (_,i)=>{
+        const v = minTemp + i*(maxTemp-minTemp)/4;
+        const y = yScale(v);
+        return `
+          <line x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>
+          <text x="${padL-8}" y="${y+4}" font-size="10" fill="rgba(255,255,255,0.6)" text-anchor="end">${Math.round(v)}°F</text>
+        `;
+      }).join("")}
+
+      <text x="${padL}" y="12" font-size="11" fill="rgba(255,255,255,0.6)">target oven temperature over time</text>
+    </svg>
+  `;
+}
+
+/* ---------------------------
    VIEW SWITCHING
 ----------------------------*/
 function setView(next){
   view=next;
+
+  [viewPlan, viewPrep, viewRun, viewDash, viewData].forEach(v => v.classList.remove("view-enter"));
+
   viewPlan.classList.toggle("hidden", view!=="plan");
   viewPrep.classList.toggle("hidden", view!=="prep");
   viewRun.classList.toggle("hidden",  view!=="run");
   viewDash.classList.toggle("hidden", view!=="dash");
+  viewData.classList.toggle("hidden", view!=="data");
+
+  const activeEl = view==="plan" ? viewPlan : view==="prep" ? viewPrep : view==="run" ? viewRun : view==="dash" ? viewDash : viewData;
+  activeEl.classList.add("view-enter");
 
   const on = "px-3 py-1.5 rounded-xl text-sm transition bg-neutral-800 text-white";
   const off = "px-3 py-1.5 rounded-xl text-sm transition text-neutral-400 hover:text-white";
@@ -1996,10 +2324,12 @@ function setView(next){
   tabPrep.className = view==="prep"?on:off;
   tabRun.className  = view==="run"?on:off;
   tabDash.className = view==="dash"?on:off;
+  tabData.className = view==="data"?on:off;
 
   if(view==="prep") renderPrep();
   if(view==="run") renderRun();
   if(view==="dash") renderDash();
+  if(view==="data") renderData();
 
   renderGlobalAlarmOverlay();
   saveState(true);
@@ -2012,6 +2342,7 @@ tabPlan.addEventListener("click",()=>setView("plan"));
 tabPrep.addEventListener("click",()=>setView("prep"));
 tabRun.addEventListener("click",()=>setView("run"));
 tabDash.addEventListener("click",()=>setView("dash"));
+tabData.addEventListener("click",()=>setView("data"));
 
 btnSortTime.addEventListener("click", sortTimelineByTime);
 
@@ -2036,6 +2367,7 @@ btnPrepSeed.addEventListener("click",()=>seedPrepTasks(true));
 btnPrepBulkAdd.addEventListener("click", addPrepTasksBulk);
 
 btnDashRefresh.addEventListener("click",()=>renderDash());
+btnDataRefresh.addEventListener("click",()=>renderData());
 
 btnSave.addEventListener("click",()=>saveState());
 btnClearAll.addEventListener("click",()=>{
@@ -2049,6 +2381,7 @@ btnClearAll.addEventListener("click",()=>{
   chimeFiredInIds.clear();
   stopGlobalAlarmIfNoneActive();
   stopTicking();
+  document.body.classList.remove("cooking");
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
 
@@ -2068,6 +2401,7 @@ seedPrepTasks(true);
 setView(view || "plan");
 
 if(startedAtTs){
+  document.body.classList.add("cooking");
   startTicking();
   if(isRunning) setView("run");
 }
