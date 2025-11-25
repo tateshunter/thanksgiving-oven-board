@@ -332,10 +332,6 @@ let prepTasks = [];
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
 
-// NEW: active delay / pause tracking for one oven item at a time
-let activeDelay = null; 
-// shape: { itemId: string, startTs: number }
-
 /* ---------------------------
    AUDIO ALARM
 ----------------------------*/
@@ -374,7 +370,7 @@ function stopGlobalAlarmIfNoneActive() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v4";
+const STORAGE_KEY = "thanksgiving-oven-board:v3";
 
 function saveState(silent=false) {
   try {
@@ -385,7 +381,6 @@ function saveState(silent=false) {
       isRunning,
       pausedAtTs,
       pausedAccumMs,
-      activeDelay,
       view,
       sortAsc,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
@@ -418,10 +413,6 @@ function loadState() {
     isRunning = data.isRunning ?? false;
     pausedAtTs = data.pausedAtTs ?? null;
     pausedAccumMs = data.pausedAccumMs ?? 0;
-    activeDelay = (data.activeDelay && data.activeDelay.itemId && data.activeDelay.startTs)
-      ? data.activeDelay
-      : null;
-
     view = data.view ?? "plan";
     sortAsc = data.sortAsc ?? true;
 
@@ -705,73 +696,6 @@ function acknowledgeDone(id){
   saveState(true);
 }
 
-/* --- NEW: Planner event helpers for temp reminder --- */
-function getSortedPlannerEvents(){
-  if(anchorMin == null) return [];
-  return timeline
-    .map(r=>{
-      const plannedMin = parseTimeToMinutes(r.time);
-      if(plannedMin == null) return null;
-      return {
-        id: r.id,
-        action: r.action,
-        temp: r.temp,
-        time: r.time,
-        item: r.item,
-        offsetMs: (plannedMin - anchorMin) * 60000
-      };
-    })
-    .filter(Boolean)
-    .sort((a,b)=>a.offsetMs-b.offsetMs);
-}
-
-function getNextPlannerEvent(rowId){
-  const evs = getSortedPlannerEvents();
-  const i = evs.findIndex(e=>e.id===rowId);
-  return i>=0 ? (evs[i+1] || null) : null;
-}
-
-/* --- NEW: Delay / Pause logic --- */
-function pauseTimelineForItem(itemId){
-  if(activeDelay) return; // one delay at a time
-
-  activeDelay = { itemId, startTs: Date.now() };
-
-  // pause overall timeline
-  if(isRunning){
-    isRunning = false;
-    pausedAtTs = Date.now();
-    stopTicking();
-  }
-
-  // stop alarms while paused
-  alarmActiveIds.clear();
-  stopGlobalAlarmIfNoneActive();
-
-  renderRun(); renderDash(); saveState(true);
-}
-
-function finishDelayedItem(itemId){
-  if(!activeDelay || activeDelay.itemId !== itemId){
-    acknowledgeDone(itemId);
-    return;
-  }
-
-  const extraMs = Date.now() - activeDelay.startTs;
-  activeDelay = null;
-
-  // offset entire timeline by extra time
-  pausedAccumMs += extraMs;
-
-  // resume overall timeline
-  pausedAtTs = null;
-  isRunning = true;
-  startTicking();
-
-  acknowledgeDone(itemId);
-  renderRun(); renderDash(); saveState(true);
-}
-
 function renderRun(){
   btnRunReset.classList.toggle("hidden", !startedAtTs);
   btnRunPause.classList.toggle("hidden", !(startedAtTs && isRunning));
@@ -835,32 +759,16 @@ function renderRun(){
     const inOven = prepLeftMs<=0 && untilDoneMs>0;
     const overdue = untilDoneMs<=0;
 
-    const isDone = acknowledgedDoneIds.has(it.id);
-    const isDelayedCard = activeDelay && activeDelay.itemId === it.id;
-    const extraMs = isDelayedCard ? (Date.now() - activeDelay.startTs) : 0;
-
-    const needsAlarm = overdue && !isDone && !isDelayedCard;
+    const needsAlarm = overdue && !acknowledgedDoneIds.has(it.id);
     if (needsAlarm) alarmActiveIds.add(it.id);
     else alarmActiveIds.delete(it.id);
 
-    let statusClass, statusText;
-    if(isDone){
-      statusClass = "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
-      statusText = "done";
-    } else if(overdue){
-      statusClass = "bg-rose-500/20 text-rose-200 border border-rose-500/40";
-      statusText = "should be done";
-    } else if(inOven){
-      statusClass = "bg-amber-500/20 text-amber-200 border border-amber-500/40";
-      statusText = "in oven now";
-    } else {
-      statusClass = "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
-      statusText = "prep time left";
-    }
-
-    // Next event temp reminder if done
-    const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
-    const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
+    const statusClass = overdue
+      ? "bg-rose-500/20 text-rose-200 border border-rose-500/40"
+      : inOven
+      ? "bg-amber-500/20 text-amber-200 border border-amber-500/40"
+      : "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
+    const statusText = overdue ? "should be done" : inOven ? "in oven now" : "prep time left";
 
     const card = document.createElement("div");
     card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
@@ -872,49 +780,17 @@ function renderRun(){
         <div class="text-xs text-neutral-400">Planned: ${it.plannedTime} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}</div>
         ${it.person ? `<div class="text-xs text-neutral-300">👤 ${titleCase(it.person)}</div>` : ``}
       </div>
-
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">prep time left (until oven)</div>
         <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(prepLeftMs)}</div>
       </div>
-
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">time until done</div>
         <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
       </div>
-
-      ${isDelayedCard ? `
-        <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-          <div class="text-xs text-neutral-400">extra time added</div>
-          <div class="text-base font-semibold inline-flex items-center gap-2">➕ ${fmtCountdownHours(extraMs)}</div>
-        </div>
-      ` : ``}
-
-      ${showNextTemp ? `
-        <div class="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-          🔔 Next up: set oven to <span class="font-semibold">${nextEv.temp}°F</span> at ${nextEv.time}
-        </div>
-      ` : ``}
-
       <div class="flex items-center justify-between">
         <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">${statusText}</div>
-        ${
-          needsAlarm
-            ? `
-              <div class="flex items-center gap-2">
-                <button
-                  class="bg-red-500 hover:bg-red-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
-                  data-ack="${it.id}"
-                >Removed from oven</button>
-
-                <button
-                  class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
-                  data-delay="${it.id}"
-                >Need more time</button>
-              </div>
-            `
-            : ``
-        }
+        ${needsAlarm ? `<button class="bg-red-500 hover:bg-red-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold" data-ack="${it.id}">Removed from oven</button>` : ``}
       </div>
     `;
 
@@ -927,64 +803,25 @@ function renderRun(){
   timersGrid.querySelectorAll("[data-ack]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-ack");
-      finishDelayedItem(id);
-    });
-  });
-
-  timersGrid.querySelectorAll("[data-delay]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-delay");
-      pauseTimelineForItem(id);
+      acknowledgeDone(id);
     });
   });
 }
 
-function startRun(){
-  startedAtTs=Date.now();
-  isRunning=true;
-  pausedAtTs=null;
-  pausedAccumMs=0;
-  activeDelay=null;
-  setView("run");
-  startTicking();
-  renderRun();
-  renderDash();
-  saveState(true);
-}
-
-function pauseRun(){
-  if(!isRunning) return;
-  isRunning=false;
-  pausedAtTs=Date.now();
-  stopTicking();
-  renderRun();
-  renderDash();
-  saveState(true);
-}
-
+function startRun(){ startedAtTs=Date.now(); isRunning=true; pausedAtTs=null; pausedAccumMs=0; setView("run"); startTicking(); renderRun(); renderDash(); saveState(true); }
+function pauseRun(){ if(!isRunning) return; isRunning=false; pausedAtTs=Date.now(); stopTicking(); renderRun(); renderDash(); saveState(true); }
 function resumeRun(){
   if(!startedAtTs) return startRun();
   if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; }
-  isRunning=true;
-  startTicking();
-  renderRun();
-  renderDash();
-  saveState(true);
+  isRunning=true; startTicking(); renderRun(); renderDash(); saveState(true);
 }
-
 function resetRun(){
   stopTicking();
-  startedAtTs=null;
-  isRunning=false;
-  pausedAtTs=null;
-  pausedAccumMs=0;
-  activeDelay=null;
+  startedAtTs=null; isRunning=false; pausedAtTs=null; pausedAccumMs=0;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   stopGlobalAlarmIfNoneActive();
-  renderRun();
-  renderDash();
-  saveState(true);
+  renderRun(); renderDash(); saveState(true);
 }
 function startTicking(){ stopTicking(); tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500); }
 function stopTicking(){ if(tickInterval) clearInterval(tickInterval); tickInterval=null; }
@@ -1487,7 +1324,6 @@ function renderDash(){
     <div class="text-sm">🔥 Oven dishes done: <span class="font-semibold">${doneOven}/${totalOven}</span></div>
     <div class="text-sm">🌡️ Temp changes left: <span class="font-semibold">${tempChangeItems.length}</span></div>
     ${nextOven ? `<div class="mt-2 text-xs text-neutral-300">Next oven item: <span class="font-semibold">${titleCase(nextOven.item||"")}</span> in ${fmtCountdownHours(nextOven.inOffsetMs - elapsedMs())}</div>` : ``}
-    ${activeDelay ? `<div class="mt-2 text-xs text-amber-300">⏸ Timeline paused for extra oven time</div>` : ``}
   `;
 
   dashBars.innerHTML = `
@@ -1631,7 +1467,7 @@ btnClearAll.addEventListener("click",()=>{
   clearState();
   timeline = DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
   prepTasks = [];
-  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; activeDelay=null;
+  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   stopGlobalAlarmIfNoneActive();
@@ -1651,9 +1487,6 @@ setView(view || "plan");
 if(startedAtTs && isRunning){
   startTicking();
   setView("run");
-} else if(startedAtTs && !isRunning){
-  // if we loaded paused state, keep it paused but render correctly
-  setView(view || "plan");
 }
 </script>
 </body>
