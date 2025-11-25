@@ -373,7 +373,15 @@ function loadState() {
     const data = JSON.parse(raw);
 
     if (Array.isArray(data.timeline)) timeline = data.timeline;
-    if (Array.isArray(data.prepTasks)) prepTasks = data.prepTasks;
+
+    if (Array.isArray(data.prepTasks)) {
+      // normalize old tasks to include subtasks
+      prepTasks = data.prepTasks.map(t => ({
+        subtasks: [],
+        ...t,
+        subtasks: Array.isArray(t.subtasks) ? t.subtasks : []
+      }));
+    }
 
     startedAtTs = data.startedAtTs ?? null;
     isRunning = data.isRunning ?? false;
@@ -813,9 +821,13 @@ function seedPrepTasks(force=true){
         task: newTaskText,
         done: false,
         sourceRowId: r.id,
+        subtasks: [],
       });
     } else if (force) {
-      prepTasks = prepTasks.map(t => t.sourceRowId===r.id ? { ...t, person: personName, task: newTaskText } : t);
+      prepTasks = prepTasks.map(t => t.sourceRowId===r.id
+        ? { ...t, person: personName, task: newTaskText, subtasks: Array.isArray(t.subtasks)?t.subtasks:[] }
+        : t
+      );
     }
   });
 
@@ -829,7 +841,7 @@ function addPrepTask(person, task){
   const t = String(task || "").trim();
   if(!t) return;
 
-  prepTasks.push({ id: uuid(), person: p, task: t, done:false });
+  prepTasks.push({ id: uuid(), person: p, task: t, done:false, subtasks: [] });
 
   prepPersonInput.value=""; prepTaskInput.value="";
   renderPrep(); renderDash(); saveState(true);
@@ -875,13 +887,53 @@ function addPrepTasksBulk(){
       id: uuid(),
       person,
       task,
-      done: false
+      done: false,
+      subtasks: [],
     });
   });
 
   prepBulkPersonSelect.value = "";
   prepBulkPersonNewInput.value = "";
   prepBulkTasksTextarea.value = "";
+
+  renderPrep(); renderDash(); saveState(true);
+}
+
+/* ---- Subtask helpers ---- */
+function addSubtask(parentTaskId, text){
+  const t = String(text || "").trim();
+  if(!t) return;
+
+  prepTasks = prepTasks.map(pt => {
+    if(pt.id !== parentTaskId) return pt;
+    const subtasks = Array.isArray(pt.subtasks) ? pt.subtasks : [];
+    return {
+      ...pt,
+      subtasks: [...subtasks, { id: uuid(), text: t, done: false }]
+    };
+  });
+
+  renderPrep(); renderDash(); saveState(true);
+}
+
+function toggleSubtaskDone(parentTaskId, subId, done){
+  prepTasks = prepTasks.map(pt => {
+    if(pt.id !== parentTaskId) return pt;
+    const subtasks = (pt.subtasks || []).map(s =>
+      s.id === subId ? { ...s, done } : s
+    );
+    return { ...pt, subtasks };
+  });
+
+  renderPrep(); renderDash(); saveState(true);
+}
+
+function deleteSubtask(parentTaskId, subId){
+  prepTasks = prepTasks.map(pt => {
+    if(pt.id !== parentTaskId) return pt;
+    const subtasks = (pt.subtasks || []).filter(s => s.id !== subId);
+    return { ...pt, subtasks };
+  });
 
   renderPrep(); renderDash(); saveState(true);
 }
@@ -928,25 +980,77 @@ function renderPrep(){
         >Add</button>
       </div>
 
-      <div class="space-y-1" id="prep-list-${safeId(person)}"></div>
+      <div class="space-y-2" id="prep-list-${safeId(person)}"></div>
     `;
     prepContainer.appendChild(card);
 
     const list = card.querySelector(`#prep-list-${safeId(person)}`);
+
     tasks.forEach(t => {
-      const row = document.createElement("label");
-      row.className = "flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 cursor-pointer";
-      row.innerHTML = `
-        <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} />
-        <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${t.task}</span>
-        <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete">delete</button>
+      const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
+      const subDone = subtasks.filter(s => s.done).length;
+
+      const taskWrap = document.createElement("div");
+      taskWrap.className = "bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 space-y-2";
+
+      taskWrap.innerHTML = `
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} data-task-check="${t.id}" />
+          <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${t.task}</span>
+          ${subtasks.length ? `<span class="text-[11px] text-neutral-400 ml-2">${subDone}/${subtasks.length} subtasks</span>` : ``}
+          <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete" data-task-del="${t.id}">delete</button>
+        </label>
+
+        <div class="space-y-1 pl-6" data-sublist="${t.id}">
+          ${
+            subtasks.map(s => `
+              <label class="flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 cursor-pointer">
+                <input type="checkbox" class="accent-emerald-500" ${s.done?"checked":""} data-sub-check="${t.id}::${s.id}" />
+                <span class="text-xs ${s.done?"line-through text-neutral-500":"text-neutral-200"}">${s.text}</span>
+                <button class="ml-auto text-neutral-600 hover:text-red-400 text-[10px]" title="delete subtask" data-sub-del="${t.id}::${s.id}">delete</button>
+              </label>
+            `).join("")
+          }
+        </div>
+
+        <div class="flex items-center gap-2 pl-6">
+          <input
+            class="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs"
+            placeholder="Add subtask…"
+            data-sub-input="${t.id}"
+          />
+          <button
+            class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-2 py-1.5 text-xs transition"
+            data-sub-add="${t.id}"
+          >Add</button>
+        </div>
       `;
-      row.querySelector("input").addEventListener("change", (e)=>{ t.done=e.target.checked; renderPrep(); renderDash(); saveState(true); });
-      row.querySelector("button").addEventListener("click", (e)=>{ e.preventDefault(); prepTasks = prepTasks.filter(x=>x.id!==t.id); renderPrep(); renderDash(); saveState(true); });
-      list.appendChild(row);
+
+      list.appendChild(taskWrap);
     });
   });
 
+  // parent task toggle
+  prepContainer.querySelectorAll("[data-task-check]").forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      const id = chk.getAttribute("data-task-check");
+      const done = e.target.checked;
+      prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
+      renderPrep(); renderDash(); saveState(true);
+    });
+  });
+
+  // parent task delete
+  prepContainer.querySelectorAll("[data-task-del]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = btn.getAttribute("data-task-del");
+      prepTasks = prepTasks.filter(x => x.id !== id);
+      renderPrep(); renderDash(); saveState(true);
+    });
+  });
+
+  // inline add per person
   prepContainer.querySelectorAll("[data-inline-add]").forEach(btn => {
     btn.addEventListener("click", () => {
       const person = btn.getAttribute("data-inline-add");
@@ -954,9 +1058,38 @@ function renderPrep(){
       const task = input.value.trim();
       if(!task) return;
 
-      prepTasks.push({ id: uuid(), person, task, done:false });
+      prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
       renderPrep(); renderDash(); saveState(true);
+    });
+  });
+
+  // subtask add
+  prepContainer.querySelectorAll("[data-sub-add]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const parentId = btn.getAttribute("data-sub-add");
+      const input = prepContainer.querySelector(`[data-sub-input="${parentId}"]`);
+      addSubtask(parentId, input.value);
+      input.value = "";
+    });
+  });
+
+  // subtask toggle
+  prepContainer.querySelectorAll("[data-sub-check]").forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      const key = chk.getAttribute("data-sub-check");
+      const [parentId, subId] = key.split("::");
+      toggleSubtaskDone(parentId, subId, e.target.checked);
+    });
+  });
+
+  // subtask delete
+  prepContainer.querySelectorAll("[data-sub-del]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const key = btn.getAttribute("data-sub-del");
+      const [parentId, subId] = key.split("::");
+      deleteSubtask(parentId, subId);
     });
   });
 }
@@ -1037,7 +1170,13 @@ function renderDash(){
 
     const prepList = prepForP.length ? prepForP.map(t => {
       const box = t.done ? "✅" : "⬜";
-      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${t.task}</div>`;
+      const subs = Array.isArray(t.subtasks) && t.subtasks.length
+        ? `<div class="ml-4 mt-0.5 space-y-0.5">${t.subtasks.map(s=>{
+            const sbox = s.done ? "✅" : "⬜";
+            return `<div class="text-[11px] ${s.done?"text-neutral-600 line-through":"text-neutral-300"}">${sbox} ${s.text}</div>`;
+          }).join("")}</div>`
+        : "";
+      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${t.task}${subs}</div>`;
     }).join("") : `<div class="text-xs text-neutral-500">No prep tasks</div>`;
 
     return `
