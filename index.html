@@ -26,6 +26,43 @@
     #dash-bars button[data-scrub-id]{
       touch-action: manipulation;
     }
+
+    /* tasteful ring timers */
+    .ring {
+      --pct: 0;
+      --size: 84px;
+      --thickness: 10px;
+      width: var(--size);
+      height: var(--size);
+      border-radius: 9999px;
+      background:
+        conic-gradient(#76ba43 calc(var(--pct) * 1%), #1f2937 0);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .ring::after{
+      content:"";
+      position:absolute;
+      inset: var(--thickness);
+      background:#0a0a0a;
+      border-radius:9999px;
+      border:1px solid #1f2937;
+    }
+    .ring > .ring-label{
+      position:relative;
+      z-index:1;
+      font-weight:700;
+      font-size:12px;
+      color:#e5e7eb;
+      text-align:center;
+      line-height:1.1;
+      padding:0 6px;
+    }
+
+    .ring-sm{ --size: 56px; --thickness: 8px; }
+    .ring-md{ --size: 84px; --thickness: 10px; }
+    .ring-lg{ --size: 120px; --thickness: 12px; }
   </style>
 </head>
 <body class="min-h-screen w-full bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900 text-neutral-100 p-4 md:p-8">
@@ -343,28 +380,13 @@ function taskTotals(tasksArr){
   };
 }
 
-/* tasteful ring timer */
-function ringTimerHtml({ remainingMs, totalMs, size=86, stroke=8, labelTop="", labelBottom="" }) {
-  if(!Number.isFinite(totalMs) || totalMs <= 0) totalMs = remainingMs || 1;
-  remainingMs = Math.max(0, remainingMs || 0);
-  const pct = Math.min(1, Math.max(0, 1 - (remainingMs / totalMs)));
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = c * pct;
-  const center = size/2;
-
+function ringHtml({ pct=0, labelTop="", labelBottom="", sizeClass="ring-md", aria="" }){
+  const safePct = Math.max(0, Math.min(100, pct));
   return `
-    <div class="relative inline-flex items-center justify-center" style="width:${size}px;height:${size}px;">
-      <svg width="${size}" height="${size}" class="-rotate-90">
-        <circle cx="${center}" cy="${center}" r="${r}" stroke="rgba(255,255,255,0.10)" stroke-width="${stroke}" fill="none"></circle>
-        <circle cx="${center}" cy="${center}" r="${r}" stroke="rgba(118,186,67,0.9)" stroke-width="${stroke}"
-          fill="none" stroke-linecap="round"
-          stroke-dasharray="${dash} ${c-dash}"></circle>
-      </svg>
-      <div class="absolute text-center leading-tight">
-        ${labelTop ? `<div class="text-[10px] uppercase tracking-widest text-neutral-500">${labelTop}</div>` : ``}
-        <div class="text-sm font-semibold">${Math.round(pct*100)}%</div>
-        ${labelBottom ? `<div class="text-[10px] text-neutral-400">${labelBottom}</div>` : ``}
+    <div class="ring ${sizeClass}" style="--pct:${safePct}" aria-label="${aria}">
+      <div class="ring-label">
+        ${labelTop ? `<div>${labelTop}</div>` : ``}
+        ${labelBottom ? `<div class="text-[10px] text-neutral-400 mt-0.5">${labelBottom}</div>` : ``}
       </div>
     </div>
   `;
@@ -388,8 +410,14 @@ let prepTasks = [];
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
 let chimeFiredInIds = new Set();
+let bellFiredNextTempIds = new Set();
 
-let activeDelay = null; 
+let activeDelay = null;
+
+/* Anchor behavior:
+   - anchorMin is recomputed on every rebuild.
+   - while running, we lock a base anchor at start so changing schedule updates all timers AND dinner countdown consistently. */
+let anchorMinAtStart = null;
 
 /* ---------------------------
    AUDIO
@@ -476,6 +504,37 @@ function playPutInChime() {
   }
 }
 
+function playBellDing(){
+  ensureAudio();
+  try{
+    const now = audioCtx.currentTime;
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = "triangle";
+    osc1.frequency.setValueAtTime(1760, now);
+    gain1.gain.setValueAtTime(0.0001, now);
+    gain1.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+    osc1.connect(gain1).connect(audioCtx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(1174.66, now + 0.02);
+    gain2.gain.setValueAtTime(0.0001, now + 0.02);
+    gain2.gain.exponentialRampToValueAtTime(0.08, now + 0.03);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    osc2.connect(gain2).connect(audioCtx.destination);
+    osc2.start(now + 0.02);
+    osc2.stop(now + 0.38);
+  } catch {
+    fallbackBeep.currentTime = 0;
+    fallbackBeep.play().catch(()=>{});
+  }
+}
+
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
@@ -493,8 +552,10 @@ function saveState(silent=false) {
       activeDelay,
       view,
       sortAsc,
+      anchorMinAtStart,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
       chimeFiredInIds: [...chimeFiredInIds],
+      bellFiredNextTempIds: [...bellFiredNextTempIds],
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -531,6 +592,7 @@ function loadState() {
 
     view = data.view ?? "plan";
     sortAsc = data.sortAsc ?? true;
+    anchorMinAtStart = data.anchorMinAtStart ?? null;
 
     if (Array.isArray(data.acknowledgedDoneIds)) {
       acknowledgedDoneIds = new Set(data.acknowledgedDoneIds);
@@ -538,6 +600,10 @@ function loadState() {
 
     if (Array.isArray(data.chimeFiredInIds)) {
       chimeFiredInIds = new Set(data.chimeFiredInIds);
+    }
+
+    if (Array.isArray(data.bellFiredNextTempIds)) {
+      bellFiredNextTempIds = new Set(data.bellFiredNextTempIds);
     }
 
     return true;
@@ -632,55 +698,48 @@ function derivedTakeOutForRow(r) {
   return timeStrFromMinutes(plannedMin + dur);
 }
 
-/* row status for highlighting */
-function planRowStatus(r){
-  if(!hasStarted() || anchorMin == null) return "upcoming";
-  const plannedMin = parseTimeToMinutes(r.time);
-  if(plannedMin == null) return "upcoming";
+function planRowStatusClass(r, idx){
+  // default zebra
+  const zebra = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
+
+  if(!hasStarted() || anchorMin == null) return zebra;
 
   const eMs = elapsedMs();
-  const offsetMs = (plannedMin - anchorMin) * 60000;
+  const plannedMin = parseTimeToMinutes(r.time);
+  const baseAnchor = anchorMinAtStart ?? anchorMin;
+  const offsetMs = plannedMin!=null ? (plannedMin - baseAnchor)*60000 : null;
 
-  // Instant-ish events: green if past
-  if(r.action !== "put in"){
-    return eMs >= offsetMs ? "done" : "upcoming";
+  // Timed put-in rows follow timer state
+  const timer = timerItems.find(t=>t.id===r.id);
+  if(timer){
+    const done = acknowledgedDoneIds.has(r.id);
+    const delayed = activeDelay && activeDelay.itemId===r.id;
+    const inOven = eMs >= timer.inOffsetMs && eMs < timer.doneOffsetMs;
+    const overdue = eMs >= timer.doneOffsetMs && !done;
+
+    if(done) return "bg-emerald-700/30 border-y border-emerald-500/40";
+    if(delayed || inOven || overdue) return "bg-amber-600/25 border-y border-amber-400/40";
+    return zebra;
   }
 
-  // Put-in rows with cook time => live oven status
-  const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
-  const hasDur = Number.isFinite(dur);
-  if(!hasDur){
-    return eMs >= offsetMs ? "done" : "upcoming";
+  // Non-timed rows: completed if past; "ongoing" if due soon (within 10 min)
+  if(offsetMs!=null){
+    const rem = offsetMs - eMs;
+    if(rem <= 0){
+      return "bg-emerald-700/20 border-y border-emerald-500/30";
+    }
+    if(rem <= 10*60*1000){
+      return "bg-amber-600/20 border-y border-amber-400/30";
+    }
   }
-
-  const inOffsetMs = offsetMs;
-  const doneOffsetMs = offsetMs + dur*60000;
-
-  const isDone = acknowledgedDoneIds.has(r.id);
-  const isDelayed = activeDelay && activeDelay.itemId === r.id;
-
-  if(isDone) return "done";
-  if(isDelayed) return "ongoing";
-  if(eMs >= inOffsetMs && eMs < doneOffsetMs) return "ongoing";
-  if(eMs >= doneOffsetMs) return "ongoing"; // overdue but not acknowledged
-  return "upcoming";
+  return zebra;
 }
 
 function renderPlan() {
   tbody.innerHTML = "";
   timeline.forEach((r, idx) => {
     const tr = document.createElement("tr");
-
-    // base zebra
-    tr.className = idx % 2 ? "bg-neutral-950" : "bg-neutral-900/40";
-
-    // status highlight overlays
-    const status = planRowStatus(r);
-    if(status === "done"){
-      tr.className = "bg-emerald-900/50 border-l-4 border-emerald-500/80";
-    } else if(status === "ongoing"){
-      tr.className = "bg-amber-900/45 border-l-4 border-amber-400/80";
-    }
+    tr.className = planRowStatusClass(r, idx);
 
     const tdTime = document.createElement("td");
     tdTime.className = "p-2";
@@ -824,10 +883,15 @@ function rebuildTimers() {
   }
   anchorMin = Math.min(...parseableTimes);
 
+  const baseAnchor = hasStarted() ? (anchorMinAtStart ?? anchorMin) : anchorMin;
+  if(hasStarted() && anchorMinAtStart==null){
+    anchorMinAtStart = baseAnchor;
+  }
+
   timerItems = timeline.filter(isTimedPutIn).map(r => {
     const plannedMin = parseTimeToMinutes(r.time);
     const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
-    const inOffsetMin = plannedMin - anchorMin;
+    const inOffsetMin = plannedMin - baseAnchor;
     const doneOffsetMin = inOffsetMin + dur;
     return {
       id:r.id, item:r.item, person:r.person, temp:r.temp, plannedTime:r.time, cookMin:dur,
@@ -839,17 +903,18 @@ function rebuildTimers() {
 
   tempChangeItems = timeline.filter(isTempChange).map(r => {
     const plannedMin = parseTimeToMinutes(r.time);
-    const offsetMin = plannedMin - anchorMin;
+    const offsetMin = plannedMin - baseAnchor;
     const targetTemp = r.temp !== "—" ? r.temp : null;
     return { id:r.id, time:r.time, action:r.action, item:r.item, targetTemp, offsetMs: offsetMin*60000 };
   }).sort((a,b)=>a.offsetMs-b.offsetMs);
 
   const serveRow = timeline.find(r => r.action === "serve" && parseTimeToMinutes(r.time)!=null);
   dinnerOffsetMs = serveRow
-    ? (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000
+    ? (parseTimeToMinutes(serveRow.time) - baseAnchor) * 60000
     : finalDoneOffsetMs;
 
   renderRun(); renderDash(); renderGlobalAlarmOverlay();
+  renderPlan();
 }
 
 function effectiveNowTs(){ return isRunning ? Date.now() : (pausedAtTs || Date.now()); }
@@ -863,14 +928,15 @@ function acknowledgeDone(id){
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
-  renderGlobalAlarmOverlay();
   renderPlan();
+  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
 /* Planner event helpers */
 function getSortedPlannerEvents(){
   if(anchorMin == null) return [];
+  const baseAnchor = hasStarted() ? (anchorMinAtStart ?? anchorMin) : anchorMin;
   return timeline
     .map(r=>{
       const plannedMin = parseTimeToMinutes(r.time);
@@ -882,7 +948,7 @@ function getSortedPlannerEvents(){
         time: r.time,
         item: r.item,
         person: r.person,
-        offsetMs: (plannedMin - anchorMin) * 60000
+        offsetMs: (plannedMin - baseAnchor) * 60000
       };
     })
     .filter(Boolean)
@@ -909,7 +975,7 @@ function pauseTimelineForItem(itemId){
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); renderPlan(); saveState(true);
+  renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function finishDelayedItem(itemId){
@@ -929,7 +995,7 @@ function finishDelayedItem(itemId){
   startTicking();
 
   acknowledgeDone(itemId);
-  renderRun(); renderDash(); renderGlobalAlarmOverlay(); renderPlan(); saveState(true);
+  renderRun(); renderDash(); renderPlan(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 /* Global alarm overlay */
@@ -1013,6 +1079,9 @@ function renderRun(){
   } else {
     const remainingFinalMs = Math.max(0, finalDoneOffsetMs - elapsedMs());
     const targetFinalTs = effectiveNowTs() + remainingFinalMs;
+    const totalFinalMs = Math.max(finalDoneOffsetMs, 1);
+    const pctFinal = (1 - remainingFinalMs / totalFinalMs) * 100;
+
     finalCountdownBox.innerHTML = `
       <div class="flex items-start justify-between gap-3">
         <div>
@@ -1020,16 +1089,9 @@ function renderRun(){
           <div class="text-5xl md:text-6xl font-bold mt-2">${fmtCountdownHours(remainingFinalMs)}</div>
           <div class="text-neutral-300 mt-2 text-sm">Until the last thing is done</div>
         </div>
-        <div class="text-right flex flex-col items-end gap-2">
-          ${ringTimerHtml({
-            remainingMs: remainingFinalMs,
-            totalMs: finalDoneOffsetMs,
-            size: 88,
-            stroke: 8,
-            labelTop: "progress",
-            labelBottom: "to end"
-          })}
-          <div>
+        <div class="flex flex-col items-end gap-2">
+          ${ringHtml({ pct: pctFinal, labelTop: "final", labelBottom: "progress", sizeClass:"ring-md", aria:"final progress ring"})}
+          <div class="text-right">
             <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
             <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
           </div>
@@ -1056,7 +1118,7 @@ function renderRun(){
       </div>`;
   }
 
-  if(!timerItems.length){ noTimers.classList.remove("hidden"); renderGlobalAlarmOverlay(); return; }
+  if(!timerItems.length){ noTimers.classList.remove("hidden"); renderGlobalAlarmOverlay(); renderPlan(); return; }
   noTimers.classList.add("hidden");
 
   const eMs = elapsedMs();
@@ -1108,6 +1170,16 @@ function renderRun(){
     const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
     const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
 
+    if(showNextTemp && !bellFiredNextTempIds.has(it.id)){
+      playBellDing();
+      bellFiredNextTempIds.add(it.id);
+      saveState(true);
+    }
+
+    const pctDone = inOven || overdue || isDone
+      ? (1 - Math.max(untilDoneMs,0) / (it.cookMin*60000 || 1)) * 100
+      : 0;
+
     const card = document.createElement("div");
     card.dataset.cardId = it.id;
     card.className = "border rounded-2xl p-4 space-y-3 " + (
@@ -1130,20 +1202,17 @@ function renderRun(){
       </div>
 
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-        <div class="text-xs text-neutral-400">time until done</div>
-        <div class="text-base font-semibold inline-flex items-center gap-2">
-          ⏲ ${fmtCountdownHours(untilDoneMs)}
-          <span class="hidden sm:inline-block">
-            ${ringTimerHtml({
-              remainingMs: Math.max(0, untilDoneMs),
-              totalMs: it.cookMin*60000,
-              size: 46,
-              stroke: 5,
-              labelTop: "",
-              labelBottom: ""
-            })}
-          </span>
+        <div>
+          <div class="text-xs text-neutral-400">time until done</div>
+          <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
         </div>
+        ${ringHtml({
+          pct: pctDone,
+          labelTop: "done",
+          labelBottom: "",
+          sizeClass:"ring-sm",
+          aria:"dish progress ring"
+        })}
       </div>
 
       ${isDelayedCard ? `
@@ -1210,6 +1279,7 @@ function renderRun(){
   });
 
   renderGlobalAlarmOverlay();
+  renderPlan();
 }
 
 function startRun(){
@@ -1220,6 +1290,8 @@ function startRun(){
   pausedAccumMs=0;
   activeDelay=null;
   chimeFiredInIds.clear();
+  bellFiredNextTempIds.clear();
+  anchorMinAtStart = anchorMin; // lock base
   setView("run");
   startTicking();
   renderRun();
@@ -1263,6 +1335,8 @@ function resetRun(){
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   chimeFiredInIds.clear();
+  bellFiredNextTempIds.clear();
+  anchorMinAtStart=null;
   stopGlobalAlarmIfNoneActive();
   renderRun();
   renderDash();
@@ -1629,7 +1703,8 @@ function renderDashNowNext(){
     .map(r=>{
       const plannedMin = parseTimeToMinutes(r.time);
       if(plannedMin == null) return null;
-      const offsetMs = (plannedMin - anchorMin) * 60000;
+      const baseAnchor = anchorMinAtStart ?? anchorMin;
+      const offsetMs = (plannedMin - baseAnchor) * 60000;
       return {
         id: r.id,
         action: r.action,
@@ -1866,51 +1941,33 @@ function renderDashScrubber(){
 /* ---------------------------
    DASHBOARD COMMAND CENTER
 ----------------------------*/
-/* fresh dinner offset so schedule edits always reflect here */
-function getDinnerOffsetMsFresh(){
-  if(anchorMin == null) return null;
-  const serveRow = timeline.find(r => r.action === "serve" && parseTimeToMinutes(r.time)!=null);
-  if(serveRow){
-    return (parseTimeToMinutes(serveRow.time) - anchorMin) * 60000;
-  }
-  return finalDoneOffsetMs;
-}
-
 function renderDash(){
   renderDashNowNext();
 
   const live = hasStarted();
   const eMs = live ? elapsedMs() : 0;
 
-  const dinnerOffsetFresh = getDinnerOffsetMsFresh();
-
   let dinnerHtml = "";
-  if(!live || dinnerOffsetFresh==null){
+  if(!live || dinnerOffsetMs==null){
     dinnerHtml = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
       <div class="text-4xl md:text-6xl font-bold mt-2">start cook</div>
       <div class="text-neutral-400 text-sm mt-1">dinner time uses your serve row (or last done dish).</div>
     `;
   } else {
-    const remMs = Math.max(0, dinnerOffsetFresh - eMs);
+    const remMs = Math.max(0, dinnerOffsetMs - eMs);
     const dinnerTs = effectiveNowTs() + remMs;
+    const totalDinnerMs = Math.max(dinnerOffsetMs, 1);
+    const pctDinner = (1 - remMs/totalDinnerMs) * 100;
+
     dinnerHtml = `
-      <div class="flex items-start justify-between gap-3">
+      <div class="flex items-start justify-between gap-4">
         <div>
           <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
           <div class="text-5xl md:text-7xl font-bold mt-2">${fmtCountdownHours(remMs)}</div>
           <div class="text-neutral-300 mt-2 text-sm">serve at ${timeStrFromDate(new Date(dinnerTs))}</div>
         </div>
-        <div class="hidden sm:block pt-1">
-          ${ringTimerHtml({
-            remainingMs: remMs,
-            totalMs: dinnerOffsetFresh,
-            size: 92,
-            stroke: 8,
-            labelTop: "progress",
-            labelBottom: "to serve"
-          })}
-        </div>
+        ${ringHtml({ pct:pctDinner, labelTop:"dinner", labelBottom:"progress", sizeClass:"ring-lg", aria:"dinner countdown ring"})}
       </div>
     `;
   }
@@ -2123,6 +2180,7 @@ function setView(next){
   if(view==="run") renderRun();
   if(view==="dash") renderDash();
 
+  renderPlan();
   renderGlobalAlarmOverlay();
   saveState(true);
 }
@@ -2169,6 +2227,8 @@ btnClearAll.addEventListener("click",()=>{
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   chimeFiredInIds.clear();
+  bellFiredNextTempIds.clear();
+  anchorMinAtStart=null;
   stopGlobalAlarmIfNoneActive();
   stopTicking();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
