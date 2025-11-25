@@ -22,20 +22,13 @@
       border-color: rgba(239,68,68,0.7) !important;
     }
 
-    /* dashboard scrubber touch polish */
-    #dash-bars button[data-scrub-id]{
-      touch-action: manipulation;
-    }
-
-    /* ring progress */
+    /* ring progress (used ONLY for current/next in main boxes) */
     .ring-wrap { width: 96px; height: 96px; }
     .ring-svg { transform: rotate(-90deg); }
     .ring-bg { stroke: #1f2937; }
     .ring-fg { transition: stroke-dashoffset .35s ease; stroke-linecap: round; }
     .ring-text { font-variant-numeric: tabular-nums; }
-    @media (min-width: 768px){
-      .ring-wrap { width: 110px; height: 110px; }
-    }
+    @media (min-width: 768px){ .ring-wrap { width: 110px; height: 110px; } }
     @media (prefers-reduced-motion: reduce){
       .alarm-tile { animation: none; }
       .ring-fg { transition: none; }
@@ -68,7 +61,7 @@
     <!-- PLAN VIEW -->
     <section id="view-plan" class="space-y-3">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div class="text-sm text-neutral-400">Edit rows to match your exact plan. For “Set oven temp,” use the Oven Temp column.</div>
+        <div class="text-sm text-neutral-400">Edit rows to match your exact plan. Changes update live even while running.</div>
         <div class="flex items-center gap-2 flex-wrap">
           <button id="btn-sort-time" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">↕ Sort by time</button>
           <button id="btn-add-row" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">➕ Add row</button>
@@ -108,14 +101,12 @@
           <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Re-seed from plan</button>
         </div>
 
-        <!-- Single task add -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
           <input id="prep-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Person (e.g., Emily)" />
           <input id="prep-task" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="Prep task (e.g., Chop onions, mix batter, set table)" />
           <button id="btn-prep-add" class="md:col-span-3 bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">Add prep task</button>
         </div>
 
-        <!-- Bulk add -->
         <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
           <div class="text-sm font-semibold">Bulk add tasks for one person</div>
 
@@ -159,6 +150,7 @@ Set table"></textarea>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <!-- BIG MAIN BOX: FINAL COUNTDOWN + 2 RINGS -->
           <div id="final-countdown" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
           <div id="temp-changes" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-2"></div>
         </div>
@@ -187,13 +179,13 @@ Set table"></textarea>
         <div id="dash-now-next" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <!-- BIG MAIN BOX: DINNER COUNTDOWN + 2 RINGS -->
           <div id="dash-dinner" class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-2xl p-5"></div>
           <div id="dash-numbers" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
         </div>
 
         <div id="dash-bars" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-4"></div>
 
-        <!-- RANDOM TASK SELECTOR -->
         <div id="dash-random-task" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
 
         <div id="dash-by-person" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
@@ -233,14 +225,7 @@ Set table"></textarea>
    DATA + HELPERS
 ----------------------------*/
 const temps = ["—", 300, 325, 350, 375, 400, 425, 450];
-
-const actions = [
-  "set oven temp",
-  "put in",
-  "flex / oven off",
-  "reheat window",
-  "serve",
-];
+const actions = ["set oven temp","put in","flex / oven off","reheat window","serve"];
 
 const DEFAULT_TIMELINE = [
   { time: "1:00 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
@@ -284,7 +269,6 @@ function fmtCountdownHours(ms) {
   const sec = s % 60;
   return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
-
 function fmtCountdownShort(ms){
   const s = Math.max(0, Math.floor(ms/1000));
   const m = Math.floor(s/60);
@@ -303,12 +287,10 @@ function ringProgressHtml({
   subText = ""
 }){
   totalMs = Math.max(1, totalMs);
-  const rem = remainingMs;
-  const pct = Math.max(0, Math.min(1, 1 - rem / totalMs));
+  const pct = Math.max(0, Math.min(1, 1 - remainingMs / totalMs));
   const radius = 40;
   const circ = 2 * Math.PI * radius;
-  const dash = circ * pct;
-  const dashOffset = circ - dash;
+  const dashOffset = circ - (circ * pct);
 
   const fgStroke = overdue ? "stroke-rose-400" : colorClass.replace("text-","stroke-");
   const glow = overdue ? "drop-shadow(0 0 6px rgba(244,63,94,.6))" : "drop-shadow(0 0 4px rgba(118,186,67,.45))";
@@ -316,7 +298,7 @@ function ringProgressHtml({
   return `
     <div class="ring-wrap shrink-0 flex flex-col items-center justify-center">
       <div class="text-[10px] uppercase tracking-widest text-neutral-500 mb-1 text-center">${esc(title)}</div>
-      <svg class="ring-svg ring-svg w-full h-full" viewBox="0 0 100 100" style="filter:${glow}">
+      <svg class="ring-svg w-full h-full" viewBox="0 0 100 100" style="filter:${glow}">
         <circle class="ring-bg" cx="50" cy="50" r="${radius}" fill="none" stroke-width="10" />
         <circle class="ring-fg ${fgStroke}" cx="50" cy="50" r="${radius}" fill="none" stroke-width="10"
           stroke-dasharray="${circ}"
@@ -337,7 +319,6 @@ function timeStrFromDate(d) {
   const hh = ((h + 11) % 12) + 1;
   return `${hh}:${String(m).padStart(2, "0")} ${ampm}`;
 }
-
 function timeStrFromMinutes(totalMin) {
   if (totalMin == null) return "—";
   totalMin = ((totalMin % 1440) + 1440) % 1440;
@@ -352,7 +333,6 @@ function titleCase(str = "") {
   return str.toLowerCase().trim().split(/ +/).filter(Boolean)
     .map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
-
 function normalizePerson(str = "") {
   const trimmed = String(str || "").trim();
   if (!trimmed) return "";
@@ -363,11 +343,9 @@ function normalizePerson(str = "") {
     .map(w => w[0].toUpperCase() + w.slice(1))
     .join(" ");
 }
-
 function safeId(str = "") {
   return String(str || "").replace(/[^a-z0-9_-]/gi, "_");
 }
-
 function capFirst(str = "") {
   if (!str) return str;
   return str[0].toUpperCase() + str.slice(1);
@@ -388,27 +366,6 @@ function parseTimeToMinutes(raw) {
   return hh * 60 + mm;
 }
 
-function taskTotals(tasksArr){
-  const parentsTotal = tasksArr.length;
-  const parentsDone  = tasksArr.filter(t => t.done).length;
-
-  let subsTotal = 0;
-  let subsDone  = 0;
-
-  tasksArr.forEach(t => {
-    const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
-    subsTotal += subs.length;
-    subsDone  += subs.filter(s => s.done).length;
-  });
-
-  return {
-    parentsTotal, parentsDone,
-    subsTotal, subsDone,
-    grandTotal: parentsTotal + subsTotal,
-    grandDone: parentsDone + subsDone
-  };
-}
-
 /* ---------------------------
    STATE
 ----------------------------*/
@@ -421,6 +378,9 @@ let isRunning = false;
 let pausedAtTs = null;
 let pausedAccumMs = 0;
 let tickInterval = null;
+
+/* NEW: lock the anchor time at start so plan edits don't shift everything */
+let anchorMinLocked = null;
 
 let prepTasks = [];
 
@@ -440,14 +400,9 @@ const fallbackBeep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAA
 fallbackBeep.volume = 0.25;
 
 function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume().catch(()=>{});
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(()=>{});
 }
-
 function unlockAudioOnFirstGesture(){
   const unlock = () => {
     ensureAudio();
@@ -493,7 +448,6 @@ function playPutInChime() {
   ensureAudio();
   try {
     const now = audioCtx.currentTime;
-
     const makeTone = (freq, start, dur, vol=0.18) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -506,7 +460,6 @@ function playPutInChime() {
       osc.start(start);
       osc.stop(start + dur + 0.02);
     };
-
     makeTone(1046.5, now, 0.35);
     makeTone(783.99, now + 0.22, 0.45);
   } catch {
@@ -518,7 +471,7 @@ function playPutInChime() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v9";
+const STORAGE_KEY = "thanksgiving-oven-board:v10";
 
 function saveState(silent=false) {
   try {
@@ -532,6 +485,7 @@ function saveState(silent=false) {
       activeDelay,
       view,
       sortAsc,
+      anchorMinLocked,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
       chimeFiredInIds: [...chimeFiredInIds],
       savedAt: Date.now(),
@@ -550,7 +504,6 @@ function loadState() {
     const data = JSON.parse(raw);
 
     if (Array.isArray(data.timeline)) timeline = data.timeline;
-
     if (Array.isArray(data.prepTasks)) {
       prepTasks = data.prepTasks.map(t => ({
         subtasks: [],
@@ -571,13 +524,10 @@ function loadState() {
     view = data.view ?? "plan";
     sortAsc = data.sortAsc ?? true;
 
-    if (Array.isArray(data.acknowledgedDoneIds)) {
-      acknowledgedDoneIds = new Set(data.acknowledgedDoneIds);
-    }
+    anchorMinLocked = data.anchorMinLocked ?? null;
 
-    if (Array.isArray(data.chimeFiredInIds)) {
-      chimeFiredInIds = new Set(data.chimeFiredInIds);
-    }
+    if (Array.isArray(data.acknowledgedDoneIds)) acknowledgedDoneIds = new Set(data.acknowledgedDoneIds);
+    if (Array.isArray(data.chimeFiredInIds)) chimeFiredInIds = new Set(data.chimeFiredInIds);
 
     return true;
   } catch (err) {
@@ -586,9 +536,7 @@ function loadState() {
   }
 }
 
-function clearState() {
-  localStorage.removeItem(STORAGE_KEY);
-}
+function clearState() { localStorage.removeItem(STORAGE_KEY); }
 
 function flashSaved() {
   const btn = document.getElementById("btn-save");
@@ -665,10 +613,8 @@ function derivedTakeOutForRow(r) {
   const plannedMin = parseTimeToMinutes(r.time);
   if (plannedMin == null) return null;
   if (r.action !== "put in") return null;
-
   const dur = typeof r.cookMin === "number" ? r.cookMin : parseInt(r.cookMin, 10);
   if (!Number.isFinite(dur)) return null;
-
   return timeStrFromMinutes(plannedMin + dur);
 }
 
@@ -684,11 +630,12 @@ function renderPlan() {
     const timeInput = tdTime.querySelector("input");
     timeInput.addEventListener("input", (e) => {
       r.time = e.target.value;
-      rebuildTimers();
+      rebuildTimers();  // live update
       saveState(true);
     });
     timeInput.addEventListener("blur", () => {
       renderPlan();
+      rebuildTimers();
       saveState(true);
     });
 
@@ -698,8 +645,7 @@ function renderPlan() {
     tdTemp.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${tempOptions}</select>`;
     tdTemp.querySelector("select").addEventListener("change", (e) => {
       r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10);
-      rebuildTimers(); saveState(true);
-      renderPlan();
+      rebuildTimers(); saveState(true); renderPlan();
     });
 
     const tdAction = document.createElement("td");
@@ -708,8 +654,7 @@ function renderPlan() {
     tdAction.innerHTML = `<select class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1">${actionOptions}</select>`;
     tdAction.querySelector("select").addEventListener("change", (e) => {
       r.action = e.target.value;
-      rebuildTimers(); seedPrepTasks(false); saveState(true);
-      renderPlan();
+      rebuildTimers(); seedPrepTasks(false); saveState(true); renderPlan();
     });
 
     const tdItem = document.createElement("td");
@@ -729,8 +674,7 @@ function renderPlan() {
       rebuildTimers(); saveState(true);
     });
     cookInput.addEventListener("blur", () => {
-      renderPlan();
-      saveState(true);
+      renderPlan(); rebuildTimers(); saveState(true);
     });
 
     const tdTakeOut = document.createElement("td");
@@ -744,19 +688,14 @@ function renderPlan() {
     tdPerson.className = "p-2";
     tdPerson.innerHTML = `<input class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1" placeholder="who's on it?" value="${esc(r.person ?? "")}">`;
     const personInput = tdPerson.querySelector("input");
-
     personInput.addEventListener("input", (e) => {
       r.person = e.target.value;
-      seedPrepTasks(false);
-      saveState(true);
+      seedPrepTasks(false); saveState(true);
     });
     personInput.addEventListener("blur", (e) => {
       r.person = normalizePerson(e.target.value);
       e.target.value = r.person;
-      rebuildTimers();
-      seedPrepTasks(true);
-      renderPlan();
-      saveState(true);
+      rebuildTimers(); seedPrepTasks(true); renderPlan(); saveState(true);
     });
 
     const tdDel = document.createElement("td");
@@ -818,7 +757,9 @@ function rebuildTimers() {
     renderRun(); renderDash(); renderGlobalAlarmOverlay();
     return;
   }
-  anchorMin = Math.min(...parseableTimes);
+
+  // Use locked anchor once cook has started, so edits don't shift everything
+  anchorMin = (startedAtTs && anchorMinLocked!=null) ? anchorMinLocked : Math.min(...parseableTimes);
 
   timerItems = timeline.filter(isTimedPutIn).map(r => {
     const plannedMin = parseTimeToMinutes(r.time);
@@ -856,39 +797,10 @@ function acknowledgeDone(id){
   acknowledgedDoneIds.add(id);
   alarmActiveIds.delete(id);
   stopGlobalAlarmIfNoneActive();
-  renderRun();
-  renderDash();
-  renderGlobalAlarmOverlay();
+  renderRun(); renderDash(); renderGlobalAlarmOverlay();
   saveState(true);
 }
 
-/* Planner event helpers */
-function getSortedPlannerEvents(){
-  if(anchorMin == null) return [];
-  return timeline
-    .map(r=>{
-      const plannedMin = parseTimeToMinutes(r.time);
-      if(plannedMin == null) return null;
-      return {
-        id: r.id,
-        action: r.action,
-        temp: r.temp,
-        time: r.time,
-        item: r.item,
-        person: r.person,
-        offsetMs: (plannedMin - anchorMin) * 60000
-      };
-    })
-    .filter(Boolean)
-    .sort((a,b)=>a.offsetMs-b.offsetMs);
-}
-function getNextPlannerEvent(rowId){
-  const evs = getSortedPlannerEvents();
-  const i = evs.findIndex(e=>e.id===rowId);
-  return i>=0 ? (evs[i+1] || null) : null;
-}
-
-/* Delay / Pause logic */
 function pauseTimelineForItem(itemId){
   if(activeDelay) return;
   activeDelay = { itemId, startTs: Date.now() };
@@ -899,7 +811,6 @@ function pauseTimelineForItem(itemId){
   }
 
   startTicking();
-
   alarmActiveIds.clear();
   stopGlobalAlarmIfNoneActive();
 
@@ -911,25 +822,37 @@ function finishDelayedItem(itemId){
     acknowledgeDone(itemId);
     return;
   }
-
   const extraMs = Date.now() - activeDelay.startTs;
   activeDelay = null;
-
   pausedAccumMs += extraMs;
-
   pausedAtTs = null;
   isRunning = true;
-
   startTicking();
-
   acknowledgeDone(itemId);
   renderRun(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
+/* current/next helper */
+function currentAndNextItems(){
+  const eMs = elapsedMs();
+
+  const inOvenNow = timerItems
+    .map(it => ({it, prepLeft: it.inOffsetMs - eMs, doneLeft: it.doneOffsetMs - eMs}))
+    .filter(x => x.prepLeft <= 0 && x.doneLeft > 0)
+    .sort((a,b)=>a.doneLeft-b.doneLeft);
+
+  const current = inOvenNow.length ? inOvenNow[0] : null;
+
+  const next = timerItems
+    .map(it => ({it, prepLeft: it.inOffsetMs - eMs}))
+    .filter(x => x.prepLeft > 0)
+    .sort((a,b)=>a.prepLeft-b.prepLeft)[0] || null;
+
+  return { current, next };
+}
+
 /* Global alarm overlay */
 function renderGlobalAlarmOverlay(){
-  if(!globalAlarmOverlay || !globalAlarmList) return;
-
   const overdueActive = timerItems.filter(it => {
     const overdue = (elapsedMs() >= it.doneOffsetMs);
     const isDone = acknowledgedDoneIds.has(it.id);
@@ -957,33 +880,20 @@ function renderGlobalAlarmOverlay(){
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <button
-          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
-          data-global-ack="${it.id}"
-        >Item done</button>
+        <button class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          data-global-ack="${it.id}">Item done</button>
 
-        <button
-          class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
-          data-global-delay="${it.id}"
-        >Need more time</button>
+        <button class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          data-global-delay="${it.id}">Need more time</button>
       </div>
     </div>
   `).join("");
 
   globalAlarmList.querySelectorAll("[data-global-ack]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-global-ack");
-      finishDelayedItem(id);
-      renderGlobalAlarmOverlay();
-    });
+    btn.addEventListener("click", ()=>finishDelayedItem(btn.getAttribute("data-global-ack")));
   });
-
   globalAlarmList.querySelectorAll("[data-global-delay]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-global-delay");
-      pauseTimelineForItem(id);
-      renderGlobalAlarmOverlay();
-    });
+    btn.addEventListener("click", ()=>pauseTimelineForItem(btn.getAttribute("data-global-delay")));
   });
 }
 
@@ -994,11 +904,12 @@ function renderRun(){
   btnRunStart.classList.toggle("hidden", !!startedAtTs);
 
   runStartedLabel.textContent = startedAtTs
-    ? `Started ${timeStrFromDate(new Date(startedAtTs))} (anchor = first planned time)`
+    ? `Started ${timeStrFromDate(new Date(startedAtTs))} (anchor locked)`
     : "Not started";
 
   timersGrid.innerHTML = "";
 
+  // MAIN FINAL COUNTDOWN BOX + 2 RINGS
   if(!startedAtTs || finalDoneOffsetMs==null){
     finalCountdownBox.innerHTML = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">final countdown</div>
@@ -1007,20 +918,65 @@ function renderRun(){
   } else {
     const remainingFinalMs = Math.max(0, finalDoneOffsetMs - elapsedMs());
     const targetFinalTs = effectiveNowTs() + remainingFinalMs;
+    const { current, next } = currentAndNextItems();
+
+    const currentRing = current
+      ? ringProgressHtml({
+          title:`current: ${titleCase(current.it.item||"")}`,
+          remainingMs: Math.max(0,current.doneLeft),
+          totalMs: current.it.cookMin*60000,
+          colorClass:"text-amber-300",
+          overdue:false,
+          bigText: fmtCountdownShort(current.doneLeft),
+          subText:"until done"
+        })
+      : ringProgressHtml({
+          title:"current",
+          remainingMs:0, totalMs:1,
+          colorClass:"text-neutral-500",
+          bigText:"—",
+          subText:"nothing cooking"
+        });
+
+    const nextRing = next
+      ? ringProgressHtml({
+          title:`next: ${titleCase(next.it.item||"")}`,
+          remainingMs: Math.max(0,next.prepLeft),
+          totalMs: next.it.inOffsetMs,
+          colorClass:"text-emerald-400",
+          overdue:false,
+          bigText: fmtCountdownShort(next.prepLeft),
+          subText:"until in"
+        })
+      : ringProgressHtml({
+          title:"next",
+          remainingMs:0, totalMs:1,
+          colorClass:"text-neutral-500",
+          bigText:"—",
+          subText:"no next item"
+        });
+
     finalCountdownBox.innerHTML = `
-      <div class="flex items-start justify-between gap-3">
-        <div>
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
           <div class="text-xs uppercase tracking-widest text-neutral-500">final countdown</div>
           <div class="text-5xl md:text-6xl font-bold mt-2">${fmtCountdownHours(remainingFinalMs)}</div>
           <div class="text-neutral-300 mt-2 text-sm">Until the last thing is done</div>
+
+          <div class="mt-3 text-xs text-neutral-500">
+            done at ${timeStrFromDate(new Date(targetFinalTs))}
+          </div>
         </div>
-        <div class="text-right">
-          <div class="text-xs text-neutral-500 uppercase tracking-widest">done at</div>
-          <div class="text-2xl font-semibold mt-1">${timeStrFromDate(new Date(targetFinalTs))}</div>
+
+        <div class="flex gap-3">
+          ${currentRing}
+          ${nextRing}
         </div>
-      </div>`;
+      </div>
+    `;
   }
 
+  // temp changes sidebar
   if(!tempChangeItems.length){
     tempChangesBox.innerHTML = `<div class="text-xs uppercase tracking-widest text-neutral-500">oven temp changes</div><div class="text-sm text-neutral-400">No planned temp changes found.</div>`;
   } else {
@@ -1049,7 +1005,6 @@ function renderRun(){
     const dueToPutIn = eMs >= it.inOffsetMs;
     const alreadyChimed = chimeFiredInIds.has(it.id);
     const isDelayed = activeDelay && activeDelay.itemId === it.id;
-
     if (startedAtTs && dueToPutIn && !alreadyChimed && !isDelayed) {
       playPutInChime();
       chimeFiredInIds.add(it.id);
@@ -1065,7 +1020,6 @@ function renderRun(){
 
     const isDone = acknowledgedDoneIds.has(it.id);
     const isDelayedCard = activeDelay && activeDelay.itemId === it.id;
-    const extraMs = isDelayedCard ? (Date.now() - activeDelay.startTs) : 0;
 
     const needsAlarm = overdue && !isDone && !isDelayedCard;
     if (needsAlarm) alarmActiveIds.add(it.id);
@@ -1089,14 +1043,6 @@ function renderRun(){
       statusText = "prep time left";
     }
 
-    const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
-    const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
-
-    const totalCookMs = it.cookMin * 60000;
-    const remainingCookMs = Math.max(0, untilDoneMs);
-    const totalPrepMs = Math.max(1, it.inOffsetMs);
-    const remainingPrepMs = Math.max(0, prepLeftMs);
-
     const card = document.createElement("div");
     card.dataset.cardId = it.id;
     card.className = "border rounded-2xl p-4 space-y-3 " + (
@@ -1107,36 +1053,12 @@ function renderRun(){
     if (needsAlarm) card.classList.add("alarm-tile");
 
     card.innerHTML = `
-      <div class="flex items-start justify-between gap-3">
-        <div class="space-y-0.5 min-w-0">
-          <div class="text-lg font-semibold truncate">${esc(titleCase(it.item||"(Unnamed Dish)"))}</div>
-          <div class="text-xs text-neutral-400">
-            Planned: ${esc(it.plannedTime)} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
-          </div>
-          ${it.person ? `<div class="text-xs text-neutral-300">👤 ${esc(titleCase(it.person))}</div>` : ``}
+      <div class="space-y-0.5 min-w-0">
+        <div class="text-lg font-semibold truncate">${esc(titleCase(it.item||"(Unnamed Dish)"))}</div>
+        <div class="text-xs text-neutral-400">
+          Planned: ${esc(it.plannedTime)} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}
         </div>
-
-        <div class="flex gap-2">
-          ${ringProgressHtml({
-            title: "until in",
-            remainingMs: remainingPrepMs,
-            totalMs: totalPrepMs,
-            colorClass: "text-emerald-400",
-            overdue: false,
-            bigText: prepLeftMs<=0 ? "in" : fmtCountdownShort(prepLeftMs),
-            subText: "prep"
-          })}
-
-          ${ringProgressHtml({
-            title: "until done",
-            remainingMs: remainingCookMs,
-            totalMs: totalCookMs,
-            colorClass: "text-amber-300",
-            overdue: untilDoneMs<=0 && !isDone && !isDelayedCard,
-            bigText: untilDoneMs<=0 ? "done" : fmtCountdownShort(untilDoneMs),
-            subText: "cook"
-          })}
-        </div>
+        ${it.person ? `<div class="text-xs text-neutral-300">👤 ${esc(titleCase(it.person))}</div>` : ``}
       </div>
 
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
@@ -1149,19 +1071,6 @@ function renderRun(){
         <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
       </div>
 
-      ${isDelayedCard ? `
-        <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-          <div class="text-xs text-neutral-400">additional oven time</div>
-          <div class="text-base font-semibold inline-flex items-center gap-2">➕ ${fmtCountdownHours(extraMs)}</div>
-        </div>
-      ` : ``}
-
-      ${showNextTemp ? `
-        <div class="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-          🔔 Next up: set oven to <span class="font-semibold">${nextEv.temp}°F</span> at ${esc(nextEv.time)}
-        </div>
-      ` : ``}
-
       <div class="flex items-center justify-between">
         <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">${statusText}</div>
 
@@ -1169,23 +1078,17 @@ function renderRun(){
           needsAlarm
             ? `
               <div class="flex items-center gap-2">
-                <button
-                  class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
-                  data-ack="${it.id}"
-                >Item done</button>
+                <button class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-ack="${it.id}">Item done</button>
 
-                <button
-                  class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
-                  data-delay="${it.id}"
-                >Pause cook (need more time)</button>
+                <button class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-delay="${it.id}">Pause cook (need more time)</button>
               </div>
             `
             : isDelayedCard
               ? `
-                <button
-                  class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
-                  data-ack="${it.id}"
-                >Item done – resume timeline</button>
+                <button class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-ack="${it.id}">Item done – resume timeline</button>
               `
               : ``
         }
@@ -1199,17 +1102,10 @@ function renderRun(){
   else stopGlobalAlarmIfNoneActive();
 
   timersGrid.querySelectorAll("[data-ack]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-ack");
-      finishDelayedItem(id);
-    });
+    btn.addEventListener("click", ()=>finishDelayedItem(btn.getAttribute("data-ack")));
   });
-
   timersGrid.querySelectorAll("[data-delay]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-delay");
-      pauseTimelineForItem(id);
-    });
+    btn.addEventListener("click", ()=>pauseTimelineForItem(btn.getAttribute("data-delay")));
   });
 
   renderGlobalAlarmOverlay();
@@ -1217,17 +1113,21 @@ function renderRun(){
 
 function startRun(){
   ensureAudio();
+
+  // lock anchor at start
+  const parseableTimes = timeline.map(r => parseTimeToMinutes(r.time)).filter(v => v != null);
+  anchorMinLocked = parseableTimes.length ? Math.min(...parseableTimes) : null;
+
   startedAtTs=Date.now();
   isRunning=true;
   pausedAtTs=null;
   pausedAccumMs=0;
   activeDelay=null;
   chimeFiredInIds.clear();
+
+  rebuildTimers();
   setView("run");
   startTicking();
-  renderRun();
-  renderDash();
-  renderGlobalAlarmOverlay();
   saveState(true);
 }
 
@@ -1236,23 +1136,17 @@ function pauseRun(){
   isRunning=false;
   pausedAtTs=Date.now();
   startTicking();
-  renderRun();
-  renderDash();
-  renderGlobalAlarmOverlay();
+  renderRun(); renderDash(); renderGlobalAlarmOverlay();
   saveState(true);
 }
-
 function resumeRun(){
   if(!startedAtTs) return startRun();
   if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; }
   isRunning=true;
   startTicking();
-  renderRun();
-  renderDash();
-  renderGlobalAlarmOverlay();
+  renderRun(); renderDash(); renderGlobalAlarmOverlay();
   saveState(true);
 }
-
 function resetRun(){
   stopTicking();
   startedAtTs=null;
@@ -1260,13 +1154,14 @@ function resetRun(){
   pausedAtTs=null;
   pausedAccumMs=0;
   activeDelay=null;
+  anchorMinLocked=null;
+
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   chimeFiredInIds.clear();
   stopGlobalAlarmIfNoneActive();
-  renderRun();
-  renderDash();
-  renderGlobalAlarmOverlay();
+
+  rebuildTimers();
   saveState(true);
 }
 
@@ -1274,34 +1169,18 @@ function startTicking(){
   stopTicking();
   tickInterval=setInterval(()=>{renderRun(); renderDash(false); renderGlobalAlarmOverlay();},500);
 }
-
 function stopTicking(){
   if(tickInterval) clearInterval(tickInterval);
   tickInterval=null;
 }
 
-/* jump to run card from dashboard scrubber */
-function gotoRunItem(id){
-  setView("run");
-  setTimeout(()=>{
-    const card = timersGrid.querySelector(`[data-card-id="${id}"]`);
-    if(card){
-      card.scrollIntoView({ behavior:"smooth", block:"center" });
-      card.classList.add("ring-2", "ring-emerald-400/80");
-      setTimeout(()=>card.classList.remove("ring-2","ring-emerald-400/80"), 1800);
-    }
-  }, 50);
-}
-
 /* ---------------------------
-   PREP BOARD
+   PREP BOARD (unchanged)
 ----------------------------*/
 function seedPrepTasks(force=true){
   const rowsWithItems = timeline.filter(r => r.item && String(r.item).trim() && r.action !== "flex / oven off");
 
-  if (force) {
-    prepTasks = prepTasks.filter(t => !t.sourceRowId);
-  }
+  if (force) prepTasks = prepTasks.filter(t => !t.sourceRowId);
 
   rowsWithItems.forEach(r => {
     const personName = normalizePerson(r.person);
@@ -1327,10 +1206,7 @@ function seedPrepTasks(force=true){
     }
   });
 
-  renderPrep();
-  renderDash();
-  renderGlobalAlarmOverlay();
-  saveState(true);
+  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
 function addPrepTask(person, task){
@@ -1346,26 +1222,16 @@ function addPrepTask(person, task){
 
 function getAllKnownPeople(){
   const people = new Set();
-  prepTasks.forEach(t => {
-    const p = normalizePerson(t.person);
-    if(p) people.add(p);
-  });
-  timeline.forEach(r => {
-    const p = normalizePerson(r.person);
-    if(p) people.add(p);
-  });
+  prepTasks.forEach(t => { const p = normalizePerson(t.person); if(p) people.add(p); });
+  timeline.forEach(r => { const p = normalizePerson(r.person); if(p) people.add(p); });
   return [...people].sort();
 }
-
 function populateBulkPersonSelect(){
-  if(!prepBulkPersonSelect) return;
-
   const people = getAllKnownPeople();
   prepBulkPersonSelect.innerHTML =
     `<option value="">Select existing person (optional)</option>` +
     people.map(p => `<option value="${esc(p)}">${esc(titleCase(p))}</option>`).join("");
 }
-
 function addPrepTasksBulk(){
   const selected = normalizePerson(prepBulkPersonSelect.value);
   const typed = normalizePerson(prepBulkPersonNewInput.value);
@@ -1373,17 +1239,10 @@ function addPrepTasksBulk(){
 
   const raw = String(prepBulkTasksTextarea.value || "");
   const lines = raw.split("\n").map(x => x.trim()).filter(Boolean);
-
   if(!person || !lines.length) return;
 
   lines.forEach(task => {
-    prepTasks.push({
-      id: uuid(),
-      person,
-      task,
-      done: false,
-      subtasks: [],
-    });
+    prepTasks.push({ id: uuid(), person, task, done: false, subtasks: [] });
   });
 
   prepBulkPersonSelect.value = "";
@@ -1393,53 +1252,13 @@ function addPrepTasksBulk(){
   renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
 }
 
-function addSubtask(parentTaskId, text){
-  const t = String(text || "").trim();
-  if(!t) return;
-
-  prepTasks = prepTasks.map(pt => {
-    if(pt.id !== parentTaskId) return pt;
-    const subtasks = Array.isArray(pt.subtasks) ? pt.subtasks : [];
-    return {
-      ...pt,
-      subtasks: [...subtasks, { id: uuid(), text: t, done: false }]
-    };
-  });
-
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
-}
-
-function toggleSubtaskDone(parentTaskId, subId, done){
-  prepTasks = prepTasks.map(pt => {
-    if(pt.id !== parentTaskId) return pt;
-    const subtasks = (pt.subtasks || []).map(s =>
-      s.id === subId ? { ...s, done } : s
-    );
-    return { ...pt, subtasks };
-  });
-
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
-}
-
-function deleteSubtask(parentTaskId, subId){
-  prepTasks = prepTasks.map(pt => {
-    if(pt.id !== parentTaskId) return pt;
-    const subtasks = (pt.subtasks || []).filter(s => s.id !== subId);
-    return { ...pt, subtasks };
-  });
-
-  renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
-}
-
 function renderPrep(){
   prepContainer.innerHTML = "";
-  const visibleTasks = prepTasks.filter(t => normalizePerson(t.person));
-
   populateBulkPersonSelect();
 
+  const visibleTasks = prepTasks.filter(t => normalizePerson(t.person));
   if(!visibleTasks.length){
     prepContainer.innerHTML = `<div class="text-sm text-neutral-400">No prep tasks assigned yet. Add some above and include a person.</div>`;
-    renderGlobalAlarmOverlay();
     return;
   }
 
@@ -1452,29 +1271,19 @@ function renderPrep(){
 
   Object.keys(byPerson).sort().forEach(person => {
     const tasks = byPerson[person];
-    const totals = taskTotals(tasks);
-
     const card = document.createElement("div");
     card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="text-lg font-semibold">${esc(titleCase(person))}</div>
-        <div class="text-xs text-neutral-400">
-          ${totals.grandDone}/${totals.grandTotal} done
-          ${totals.subsTotal ? `<span class="text-neutral-500 ml-1">(${totals.parentsTotal} tasks + ${totals.subsTotal} subtasks)</span>` : ``}
-        </div>
+        <div class="text-xs text-neutral-400">${tasks.filter(t=>t.done).length}/${tasks.length} done</div>
       </div>
 
       <div class="flex items-center gap-2">
-        <input
-          class="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
-          placeholder="Add a task for ${esc(titleCase(person))}…"
-          data-inline-task="${esc(person)}"
-        />
-        <button
-          class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition"
-          data-inline-add="${esc(person)}"
-        >Add</button>
+        <input class="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
+          placeholder="Add a task for ${esc(titleCase(person))}…" data-inline-task="${esc(person)}"/>
+        <button class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition"
+          data-inline-add="${esc(person)}">Add</button>
       </div>
 
       <div class="space-y-2" id="prep-list-${safeId(person)}"></div>
@@ -1482,759 +1291,141 @@ function renderPrep(){
     prepContainer.appendChild(card);
 
     const list = card.querySelector(`#prep-list-${safeId(person)}`);
-
     tasks.forEach(t => {
-      const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
-      const subDone = subtasks.filter(s => s.done).length;
-
-      const taskWrap = document.createElement("div");
-      taskWrap.className = "bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 space-y-2";
-
-      taskWrap.innerHTML = `
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} data-task-check="${t.id}" />
-          <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${esc(t.task)}</span>
-          ${subtasks.length ? `<span class="text-[11px] text-neutral-400 ml-2">${subDone}/${subtasks.length} subtasks</span>` : ``}
-          <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" title="delete" data-task-del="${t.id}">delete</button>
-        </label>
-
-        <div class="space-y-1 pl-6" data-sublist="${t.id}">
-          ${
-            subtasks.map(s => `
-              <label class="flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 cursor-pointer">
-                <input type="checkbox" class="accent-emerald-500" ${s.done?"checked":""} data-sub-check="${t.id}::${s.id}" />
-                <span class="text-xs ${s.done?"line-through text-neutral-500":"text-neutral-200"}">${esc(s.text)}</span>
-                <button class="ml-auto text-neutral-600 hover:text-red-400 text-[10px]" title="delete subtask" data-sub-del="${t.id}::${s.id}">delete</button>
-              </label>
-            `).join("")
-          }
-        </div>
-
-        <div class="flex items-center gap-2 pl-6">
-          <input
-            class="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs"
-            placeholder="Add subtask…"
-            data-sub-input="${t.id}"
-          />
-          <button
-            class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-2 py-1.5 text-xs transition"
-            data-sub-add="${t.id}"
-          >Add</button>
-        </div>
+      const row = document.createElement("div");
+      row.className = "bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 flex items-center gap-2";
+      row.innerHTML = `
+        <input type="checkbox" class="accent-emerald-500" ${t.done?"checked":""} data-task-check="${t.id}" />
+        <span class="text-sm ${t.done?"line-through text-neutral-500":"text-neutral-100"}">${esc(t.task)}</span>
+        <button class="ml-auto text-neutral-500 hover:text-red-400 text-xs" data-task-del="${t.id}">delete</button>
       `;
-
-      list.appendChild(taskWrap);
+      list.appendChild(row);
     });
   });
 
   prepContainer.querySelectorAll("[data-task-check]").forEach(chk => {
     chk.addEventListener("change", (e) => {
       const id = chk.getAttribute("data-task-check");
-      const done = e.target.checked;
-      prepTasks = prepTasks.map(x => x.id===id ? { ...x, done } : x);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      prepTasks = prepTasks.map(x => x.id===id ? { ...x, done:e.target.checked } : x);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
-
   prepContainer.querySelectorAll("[data-task-del]").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
+    btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-task-del");
       prepTasks = prepTasks.filter(x => x.id !== id);
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
-
   prepContainer.querySelectorAll("[data-inline-add]").forEach(btn => {
     btn.addEventListener("click", () => {
       const person = btn.getAttribute("data-inline-add");
       const input = prepContainer.querySelector(`[data-inline-task="${person}"]`);
       const task = input.value.trim();
       if(!task) return;
-
       prepTasks.push({ id: uuid(), person, task, done:false, subtasks: [] });
       input.value = "";
-      renderPrep(); renderDash(); renderGlobalAlarmOverlay(); saveState(true);
+      renderPrep(); renderDash(); saveState(true);
     });
   });
-
-  prepContainer.querySelectorAll("[data-sub-add]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const parentId = btn.getAttribute("data-sub-add");
-      const input = prepContainer.querySelector(`[data-sub-input="${parentId}"]`);
-      addSubtask(parentId, input.value);
-      input.value = "";
-    });
-  });
-
-  prepContainer.querySelectorAll("[data-sub-check]").forEach(chk => {
-    chk.addEventListener("change", (e) => {
-      const key = chk.getAttribute("data-sub-check");
-      const [parentId, subId] = key.split("::");
-      toggleSubtaskDone(parentId, subId, e.target.checked);
-    });
-  });
-
-  prepContainer.querySelectorAll("[data-sub-del]").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      const key = btn.getAttribute("data-sub-del");
-      const [parentId, subId] = key.split("::");
-      deleteSubtask(parentId, subId);
-    });
-  });
-
-  renderGlobalAlarmOverlay();
 }
 
 /* ---------------------------
-   DASHBOARD CONTROL TOWER (NOW / NEXT)
+   DASHBOARD (2 RINGS in dinner box)
 ----------------------------*/
 function renderDashNowNext(){
   if(!dashNowNext) return;
-
   if(!hasStarted() || anchorMin == null){
-    const upcoming = timeline
-      .map(r => {
-        const min = parseTimeToMinutes(r.time);
-        return { ...r, plannedMin:min };
-      })
-      .filter(r => r.plannedMin != null && r.action !== "serve")
-      .sort((a,b)=>a.plannedMin-b.plannedMin)
-      .slice(0,6);
-
     dashNowNext.innerHTML = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">control tower</div>
-      <div class="text-lg font-semibold">Upcoming from plan</div>
-      <div class="text-sm text-neutral-400">Start cook to activate live now/next countdowns.</div>
-      <div class="mt-3 space-y-2">
-        ${upcoming.map(r=>`
-          <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
-            <div>
-              <div class="text-sm font-medium">${esc(capFirst(r.action))} — ${esc(titleCase(r.item||""))}</div>
-              <div class="text-xs text-neutral-400">${esc(r.time)}${r.action==="set oven temp" && r.temp!=="—" ? ` • → ${r.temp}°F` : ""}${r.person?` • 👤 ${esc(titleCase(r.person))}`:""}</div>
-            </div>
-          </div>
-        `).join("") || `<div class="text-sm text-neutral-500">No planned rows with parseable times yet.</div>`}
-      </div>
+      <div class="text-lg font-semibold">Start cook to see live now/next</div>
     `;
     return;
   }
 
   const eMs = elapsedMs();
-
-  const events = timeline
-    .map(r=>{
-      const plannedMin = parseTimeToMinutes(r.time);
-      if(plannedMin == null) return null;
-      const offsetMs = (plannedMin - anchorMin) * 60000;
-      return {
-        id: r.id,
-        action: r.action,
-        item: r.item,
-        person: normalizePerson(r.person),
-        temp: r.temp,
-        time: r.time,
-        offsetMs
-      };
-    })
-    .filter(Boolean)
-    .sort((a,b)=>a.offsetMs-b.offsetMs);
-
-  const pastEvents = events.filter(ev => ev.offsetMs <= eMs);
-  const futureEvents = events.filter(ev => ev.offsetMs > eMs);
-
-  const lastEvent = pastEvents[pastEvents.length-1] || null;
-  const nextEvent = futureEvents[0] || null;
-
-  const inOvenNow = timerItems.filter(t=>{
-    const prepLeftMs = t.inOffsetMs - eMs;
-    const untilDoneMs = t.doneOffsetMs - eMs;
-    return prepLeftMs <= 0 && untilDoneMs > 0;
-  });
-
-  const lastTempEvent = [...pastEvents].reverse().find(ev => ev.action === "set oven temp" && ev.temp !== "—");
-  const currentTemp = lastTempEvent ? lastTempEvent.temp : null;
-
-  const runway = futureEvents.slice(0,6);
-
-  const remToNextMs = nextEvent ? (nextEvent.offsetMs - eMs) : 0;
+  const future = timerItems.filter(t=>t.inOffsetMs>eMs).sort((a,b)=>a.inOffsetMs-b.inOffsetMs)[0];
+  const inOven = timerItems.filter(t=>t.inOffsetMs<=eMs && t.doneOffsetMs>eMs);
 
   dashNowNext.innerHTML = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">control tower</div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
-        <div class="text-xs uppercase tracking-widest text-neutral-500">now</div>
-
-        ${currentTemp ? `
-          <div class="text-sm">🌡️ Current target temp: <span class="font-semibold">${currentTemp}°F</span></div>
-        ` : `
-          <div class="text-sm text-neutral-400">🌡️ No temp target active yet</div>
-        `}
-
-        ${inOvenNow.length ? `
-          <div class="space-y-1">
-            ${inOvenNow.map(it=>{
-              const untilDoneMs = it.doneOffsetMs - eMs;
-              return `
-                <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5">
-                  <div class="text-sm">${esc(titleCase(it.item||""))}</div>
-                  <div class="text-sm font-semibold">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
-                </div>
-              `;
-            }).join("")}
-          </div>
-        ` : `
-          <div class="text-sm text-neutral-400">🔥 Nothing in oven right now</div>
-        `}
-
-        ${lastEvent ? `
-          <div class="text-xs text-neutral-500 mt-1">Last event: ${esc(capFirst(lastEvent.action))} — ${esc(titleCase(lastEvent.item||""))} (${esc(lastEvent.time)})</div>
-        ` : ``}
-      </div>
-
-      <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
-        <div class="text-xs uppercase tracking-widest text-neutral-500">next</div>
-
-        ${nextEvent ? `
-          <div class="text-sm font-medium">
-            ${esc(capFirst(nextEvent.action))} — ${esc(titleCase(nextEvent.item||""))}
-          </div>
-          <div class="text-xs text-neutral-400">
-            Planned: ${esc(nextEvent.time)}
-            ${nextEvent.person?` • 👤 ${esc(titleCase(nextEvent.person))}`:""}
-            ${nextEvent.action==="set oven temp" && nextEvent.temp!=="—" ? ` • → ${nextEvent.temp}°F` : ``}
-          </div>
-
-          <div class="mt-2 flex items-center gap-3">
-            ${nextEvent.action==="put in" ? ringProgressHtml({
-              title: "until in",
-              remainingMs: Math.max(0, remToNextMs),
-              totalMs: Math.max(1, nextEvent.offsetMs),
-              colorClass: "text-emerald-400",
-              overdue: false,
-              bigText: fmtCountdownShort(remToNextMs),
-              subText: "prep"
-            }) : ``}
-
-            <div class="text-2xl font-bold">⏳ ${fmtCountdownHours(remToNextMs)}</div>
-          </div>
-        ` : `
-          <div class="text-sm text-neutral-400">No upcoming events left 🎉</div>
-        `}
-      </div>
+    <div class="text-xs uppercase tracking-widest text-neutral-500">now / next</div>
+    <div class="text-sm">
+      Now: ${inOven.length ? esc(titleCase(inOven[0].item||"")) : "nothing in oven"}
     </div>
-
-    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
-      <div class="text-xs uppercase tracking-widest text-neutral-500">runway (next up)</div>
-      ${runway.length ? `
-        <div class="space-y-2">
-          ${runway.map(ev=>{
-            const rem = ev.offsetMs - eMs;
-            const soon = rem <= 10*60*1000;
-            return `
-              <div class="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2">
-                <div>
-                  <div class="text-sm font-medium">
-                    ${esc(capFirst(ev.action))} — ${esc(titleCase(ev.item||""))}
-                  </div>
-                  <div class="text-xs text-neutral-400">
-                    ${esc(ev.time)}
-                    ${ev.person?` • 👤 ${esc(titleCase(ev.person))}`:""}
-                    ${ev.action==="set oven temp" && ev.temp!=="—" ? ` • → ${ev.temp}°F` : ``}
-                  </div>
-                </div>
-                <div class="text-sm font-semibold ${soon?"text-amber-300":"text-neutral-100"}">
-                  ${fmtCountdownHours(rem)}
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      ` : `
-        <div class="text-sm text-neutral-400">Nothing else scheduled.</div>
-      `}
+    <div class="text-sm">
+      Next: ${future ? esc(titleCase(future.item||"")) + " at " + esc(future.plannedTime) : "no next item"}
     </div>
   `;
 }
 
-/* ---------------------------
-   DASHBOARD SCRUBBER (fixed for iPad)
-----------------------------*/
-function renderDashScrubber(){
-  if(anchorMin == null){
-    return `<div class="text-sm text-neutral-400">Add parseable times in Plan to see timeline.</div>`;
-  }
-
-  const events = getSortedPlannerEvents();
-  if(!events.length){
-    return `<div class="text-sm text-neutral-400">No scheduled events yet.</div>`;
-  }
-
-  window.__selectedScrubId = window.__selectedScrubId || null;
-  const selectedId = window.__selectedScrubId;
-
-  const totalMs = (events[events.length-1].offsetMs - events[0].offsetMs) || 1;
-  const eMs = hasStarted() ? elapsedMs() : 0;
-  const pctNow = Math.min(100, Math.max(0, (eMs / totalMs) * 100));
-
-  const minGapPct = 6;
-  const laneLastPct = [-Infinity, -Infinity, -Infinity];
-  const laneOffsetsPx = [16, 30, 44];
-
-  const dotsWithLanes = events.map((ev) => {
-    const leftPct = ((ev.offsetMs - events[0].offsetMs) / totalMs) * 100;
-
-    let lane = laneLastPct.findIndex(last => (leftPct - last) >= minGapPct);
-    if(lane < 0){
-      const minLast = Math.min(...laneLastPct);
-      lane = laneLastPct.indexOf(minLast);
-    }
-    laneLastPct[lane] = leftPct;
-
-    return { ...ev, leftPct, lane };
-  });
-
-  const dotHtml = dotsWithLanes.map(ev=>{
-    const isTemp  = ev.action === "set oven temp";
-    const isServe = ev.action === "serve";
-    const overdue = hasStarted() && ev.action==="put in" && eMs > ev.offsetMs;
-
-    const dotClass = isServe
-      ? "bg-amber-300"
-      : isTemp
-        ? "bg-sky-400"
-        : "bg-emerald-400";
-
-    const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
-    const selectedClass = ev.id === selectedId ? "ring-2 ring-white/90" : "";
-
-    const label = `${capFirst(ev.action)} — ${titleCase(ev.item||"")} (${ev.time})`;
-    const labelTop = laneOffsetsPx[ev.lane] ?? 16;
-
-    return `
-      <button
-        class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${dotClass} ${pulseClass} ${selectedClass}"
-        style="left:${ev.leftPct}%"
-        aria-label="${esc(label)}"
-        data-scrub-id="${ev.id}"
-      ></button>
-
-      <div
-        class="absolute text-[10px] text-neutral-300 whitespace-nowrap -translate-x-1/2 select-none"
-        style="left:${ev.leftPct}%; top: calc(50% + ${labelTop}px);"
-      >
-        ${esc(ev.time)}
-      </div>
-    `;
-  }).join("");
-
-  const nowLine = hasStarted()
-    ? `<div class="absolute top-0 bottom-0 w-[3px] bg-white/80 shadow" style="left:${pctNow}%"></div>`
-    : `<div class="absolute top-0 bottom-0 w-[3px] bg-white/20" style="left:0%"></div>`;
-
-  const selectedEv = selectedId ? dotsWithLanes.find(e => e.id === selectedId) : null;
-
-  return `
-    <div class="space-y-2">
-      <div class="text-xs uppercase tracking-widest text-neutral-500">timeline</div>
-
-      <div class="relative h-24 bg-neutral-900 border border-neutral-800 rounded-2xl px-3">
-        <div class="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-2 rounded-full bg-neutral-800"></div>
-        ${nowLine}
-        ${dotHtml}
-      </div>
-
-      <div class="flex items-center justify-between text-xs text-neutral-500">
-        <div>${esc(events[0].time)}</div>
-        <div>${esc(events[events.length-1].time)}</div>
-      </div>
-
-      ${
-        selectedEv ? `
-          <div id="scrub-selected"
-               class="mt-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm">
-            <div class="text-xs uppercase tracking-widest text-neutral-500">selected event</div>
-            <div class="mt-1 font-semibold">
-              ${esc(capFirst(selectedEv.action))} — ${esc(titleCase(selectedEv.item || "(no item)"))}
-            </div>
-            <div class="text-xs text-neutral-400 mt-0.5">
-              Time: ${esc(selectedEv.time)}
-              ${selectedEv.temp !== "—" ? ` • Temp: ${selectedEv.temp}°F` : ``}
-              ${selectedEv.person ? ` • 👤 ${esc(titleCase(selectedEv.person))}` : ``}
-            </div>
-            <div class="text-xs text-neutral-500 mt-1">
-              Tap another dot to switch, or tap again to jump to it in Oven Timers.
-            </div>
-          </div>
-        ` : `
-          <div class="text-xs text-neutral-500 mt-1">Tap a dot to see details.</div>
-        `
-      }
-    </div>
-  `;
-}
-
-/* ---------------------------
-   RANDOM TASK SELECTOR
-----------------------------*/
-let lastRandomTaskId = null;
-
-function getRandomTask(forPerson=""){
-  const person = normalizePerson(forPerson);
-
-  let pool = prepTasks.filter(t => !t.done);
-
-  if(person){
-    pool = pool.filter(t => normalizePerson(t.person) === person);
-  } else {
-    const unassigned = pool.filter(t => !normalizePerson(t.person));
-    if(unassigned.length) pool = unassigned;
-  }
-
-  if(!pool.length) return null;
-
-  let choices = pool;
-  if(lastRandomTaskId && pool.length > 1){
-    choices = pool.filter(t => t.id !== lastRandomTaskId);
-    if(!choices.length) choices = pool;
-  }
-
-  const pick = choices[Math.floor(Math.random()*choices.length)];
-  lastRandomTaskId = pick.id;
-  return pick;
-}
-
-function renderRandomTaskCard(t){
-  const p = normalizePerson(t.person);
-  return `
-    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <div class="text-sm font-semibold">${esc(t.task)}</div>
-        <div class="text-xs text-neutral-400 mt-0.5">
-          ${p ? `assigned to ${esc(titleCase(p))}` : `unassigned task`}
-        </div>
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        ${!p ? `
-          <button data-claim="${esc(t.id)}"
-            class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 rounded-lg px-3 py-1.5 text-xs">
-            claim it
-          </button>` : ``}
-
-        <button data-done="${esc(t.id)}"
-          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold">
-          mark done
-        </button>
-      </div>
-    </div>
-  `;
-}
-
-function wireRandomTaskCard(root, taskId){
-  const claimBtn = root.querySelector(`[data-claim="${taskId}"]`);
-  const doneBtn  = root.querySelector(`[data-done="${taskId}"]`);
-
-  if(claimBtn){
-    claimBtn.addEventListener("click", ()=>{
-      const name = prompt("who is claiming this task?");
-      const p = normalizePerson(name);
-      if(!p) return;
-      prepTasks = prepTasks.map(x => x.id===taskId ? {...x, person:p} : x);
-      renderPrep(); renderDash(); saveState(true);
-    });
-  }
-
-  if(doneBtn){
-    doneBtn.addEventListener("click", ()=>{
-      prepTasks = prepTasks.map(x => x.id===taskId ? {...x, done:true} : x);
-      renderPrep(); renderDash(); saveState(true);
-    });
-  }
-}
-
-function renderDashRandomTask(){
-  if(!dashRandomTask) return;
-
-  const people = getAllKnownPeople();
-  const currentPick = lastRandomTaskId
-    ? prepTasks.find(t => t.id === lastRandomTaskId)
-    : null;
-
-  dashRandomTask.innerHTML = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">random task helper</div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-      <div class="md:col-span-2">
-        <label class="text-xs text-neutral-400 block mb-1">pick tasks for (optional)</label>
-        <select id="random-person-select" class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm">
-          <option value="">Anyone / unassigned first</option>
-          ${people.map(p=>`<option value="${esc(p)}">${esc(titleCase(p))}</option>`).join("")}
-        </select>
-      </div>
-
-      <button id="btn-random-pick"
-        class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">
-        pick a random task
-      </button>
-    </div>
-
-    <div id="random-task-result" class="mt-2">
-      ${
-        currentPick && !currentPick.done
-          ? renderRandomTaskCard(currentPick)
-          : `<div class="text-sm text-neutral-400">no task picked yet. hit the button.</div>`
-      }
-    </div>
-  `;
-
-  const sel = dashRandomTask.querySelector("#random-person-select");
-  const btn = dashRandomTask.querySelector("#btn-random-pick");
-
-  btn.addEventListener("click", ()=>{
-    const pick = getRandomTask(sel.value);
-    const result = dashRandomTask.querySelector("#random-task-result");
-    if(!pick){
-      result.innerHTML = `<div class="text-sm text-neutral-400">no unfinished tasks match that filter 🎉</div>`;
-      return;
-    }
-    result.innerHTML = renderRandomTaskCard(pick);
-    wireRandomTaskCard(result, pick.id);
-    saveState(true);
-  });
-
-  if(currentPick){
-    const result = dashRandomTask.querySelector("#random-task-result");
-    wireRandomTaskCard(result, currentPick.id);
-  }
-}
-
-/* ---------------------------
-   DASHBOARD COMMAND CENTER
-----------------------------*/
 function renderDash(){
   renderDashNowNext();
 
   const live = hasStarted();
   const eMs = live ? elapsedMs() : 0;
 
-  let dinnerHtml = "";
+  // MAIN DINNER BOX + 2 RINGS
   if(!live || dinnerOffsetMs==null){
-    dinnerHtml = `
+    dashDinner.innerHTML = `
       <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
       <div class="text-4xl md:text-6xl font-bold mt-2">start cook</div>
-      <div class="text-neutral-400 text-sm mt-1">dinner time uses your serve row (or last done dish).</div>
+      <div class="text-neutral-400 text-sm mt-1">Dinner time uses your serve row (or last done dish).</div>
     `;
   } else {
     const remMs = Math.max(0, dinnerOffsetMs - eMs);
     const dinnerTs = effectiveNowTs() + remMs;
-    dinnerHtml = `
-      <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
-      <div class="text-5xl md:text-7xl font-bold mt-2">${fmtCountdownHours(remMs)}</div>
-      <div class="text-neutral-300 mt-2 text-sm">serve at ${timeStrFromDate(new Date(dinnerTs))}</div>
+
+    const { current, next } = currentAndNextItems();
+
+    const currentRing = current
+      ? ringProgressHtml({
+          title:`current: ${titleCase(current.it.item||"")}`,
+          remainingMs: Math.max(0,current.doneLeft),
+          totalMs: current.it.cookMin*60000,
+          colorClass:"text-amber-300",
+          bigText: fmtCountdownShort(current.doneLeft),
+          subText:"until done"
+        })
+      : ringProgressHtml({ title:"current", remainingMs:0,totalMs:1,colorClass:"text-neutral-500",bigText:"—",subText:"nothing cooking" });
+
+    const nextRing = next
+      ? ringProgressHtml({
+          title:`next: ${titleCase(next.it.item||"")}`,
+          remainingMs: Math.max(0,next.prepLeft),
+          totalMs: next.it.inOffsetMs,
+          colorClass:"text-emerald-400",
+          bigText: fmtCountdownShort(next.prepLeft),
+          subText:"until in"
+        })
+      : ringProgressHtml({ title:"next", remainingMs:0,totalMs:1,colorClass:"text-neutral-500",bigText:"—",subText:"no next item" });
+
+    dashDinner.innerHTML = `
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-neutral-500">countdown to dinner</div>
+          <div class="text-5xl md:text-7xl font-bold mt-2">${fmtCountdownHours(remMs)}</div>
+          <div class="text-neutral-300 mt-2 text-sm">serve at ${timeStrFromDate(new Date(dinnerTs))}</div>
+        </div>
+
+        <div class="flex gap-3">
+          ${currentRing}
+          ${nextRing}
+        </div>
+      </div>
     `;
   }
 
-  const pastTemp = getSortedPlannerEvents()
-    .filter(ev => ev.action==="set oven temp" && ev.temp!=="—" && ev.offsetMs<=eMs)
-    .slice(-1)[0];
-
-  const nextTemp = getSortedPlannerEvents()
-    .find(ev => ev.action==="set oven temp" && ev.temp!=="—" && ev.offsetMs>eMs);
-
-  const tempHeroHtml = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">oven temp</div>
-    <div class="text-4xl md:text-5xl font-bold mt-2">
-      ${pastTemp ? `${pastTemp.temp}°F` : "—"}
-    </div>
-    <div class="text-sm text-neutral-400 mt-1">
-      ${pastTemp ? `set at ${esc(pastTemp.time)}` : "no active target yet"}
-    </div>
-
-    ${nextTemp && live ? `
-      <div class="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-        <div class="text-xs text-neutral-500 uppercase tracking-widest">next change</div>
-        <div class="text-lg font-semibold mt-1">→ ${nextTemp.temp}°F at ${esc(nextTemp.time)}</div>
-        <div class="text-2xl font-bold mt-1">in ${fmtCountdownHours(nextTemp.offsetMs - eMs)}</div>
-      </div>
-    ` : ``}
-  `;
-
-  const inOvenNow = timerItems.filter(t=>{
-    const prepLeftMs = t.inOffsetMs - eMs;
-    const untilDoneMs = t.doneOffsetMs - eMs;
-    return live && prepLeftMs<=0 && untilDoneMs>0;
-  });
-
-  const inOvenHtml = inOvenNow.length ? `
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      ${inOvenNow.map(it=>{
-        const untilDoneMs = it.doneOffsetMs - eMs;
-        const totalCookMs = it.cookMin * 60000;
-        const remainingCookMs = Math.max(0, untilDoneMs);
-
-        return `
-          <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2 flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <div class="text-xl md:text-2xl font-semibold truncate">${esc(titleCase(it.item||""))}</div>
-              <div class="text-sm text-neutral-400 mt-1">
-                planned ${esc(it.plannedTime)} • ${it.cookMin} min
-                ${it.person?` • 👤 ${esc(titleCase(it.person))}`:""}
-              </div>
-              <div class="text-2xl font-bold mt-2">⏲ ${fmtCountdownShort(untilDoneMs)}</div>
-            </div>
-
-            ${ringProgressHtml({
-              title: "until done",
-              remainingMs: remainingCookMs,
-              totalMs: totalCookMs,
-              colorClass: "text-amber-300",
-              overdue: untilDoneMs<=0,
-              bigText: untilDoneMs<=0 ? "done" : fmtCountdownShort(untilDoneMs),
-              subText: "cook"
-            })}
-          </div>
-        `;
-      }).join("")}
-    </div>
-  ` : `<div class="text-lg text-neutral-400">nothing in oven right now</div>`;
-
-  const prepTotalsAll = taskTotals(prepTasks);
-  const totalPrep = prepTotalsAll.grandTotal;
-  const donePrep  = prepTotalsAll.grandDone;
-  const prepPct   = totalPrep ? Math.round(donePrep/totalPrep*100) : 0;
-
-  const totalOven = timerItems.length;
-  const doneOven = totalOven ? timerItems.filter(t => live && eMs >= t.doneOffsetMs).length : 0;
-  const ovenPct = totalOven ? Math.round(doneOven/totalOven*100) : 0;
-
-  dashDinner.innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      <div class="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
-        ${dinnerHtml}
-      </div>
-      <div class="bg-neutral-950 border border-neutral-800 rounded-3xl p-6">
-        ${tempHeroHtml}
-      </div>
-    </div>
-
-    <div class="mt-4 bg-neutral-950 border border-neutral-800 rounded-3xl p-6 space-y-3">
-      <div class="text-xs uppercase tracking-widest text-neutral-500">in oven now</div>
-      ${inOvenHtml}
-    </div>
-  `;
-
-  dashBars.innerHTML = `
-    ${renderDashScrubber()}
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
-      <div>
-        <div class="flex items-center justify-between text-base mb-2">
-          <span>prep completion</span><span>${prepPct}%</span>
-        </div>
-        <div class="bar h-3"><div style="width:${prepPct}%"></div></div>
-      </div>
-
-      <div>
-        <div class="flex items-center justify-between text-base mb-2">
-          <span>oven timeline</span><span>${ovenPct}%</span>
-        </div>
-        <div class="bar h-3"><div style="width:${ovenPct}%"></div></div>
-      </div>
-    </div>
-  `;
-
   dashNumbers.innerHTML = `
     <div class="text-xs uppercase tracking-widest text-neutral-500">quick stats</div>
-    <div class="text-lg">prep ${donePrep}/${totalPrep}</div>
-    <div class="text-xs text-neutral-500">(${prepTotalsAll.parentsTotal} tasks + ${prepTotalsAll.subsTotal} subtasks)</div>
-    <div class="text-lg">oven done ${doneOven}/${totalOven}</div>
-    <div class="text-lg">temp changes left ${tempChangeItems.length}</div>
+    <div class="text-lg">oven items ${timerItems.length}</div>
+    <div class="text-lg">temp changes ${tempChangeItems.length}</div>
     ${activeDelay ? `<div class="text-amber-300 text-sm mt-2">cook paused for extra oven time</div>` : ``}
   `;
 
-  const people = new Set([
-    ...prepTasks.filter(t=>normalizePerson(t.person)).map(t=>normalizePerson(t.person)),
-    ...timeline.filter(r=>normalizePerson(r.person)).map(r=>normalizePerson(r.person))
-  ]);
-
-  window.__openPeople = window.__openPeople || new Set();
-  const openPeople = window.__openPeople;
-
-  const byPersonHtml = [...people].sort().map(p => {
-    const prepForP = prepTasks.filter(t=>normalizePerson(t.person)===p);
-    const totalsForP = taskTotals(prepForP);
-    const doneForP = totalsForP.grandDone;
-    const isOpen = openPeople.has(p);
-
-    const prepList = prepForP.length ? prepForP.map(t => {
-      const box = t.done ? "✅" : "⬜";
-      const subs = Array.isArray(t.subtasks) && t.subtasks.length
-        ? `<div class="ml-4 mt-0.5 space-y-0.5">${t.subtasks.map(s=>{
-            const sbox = s.done ? "✅" : "⬜";
-            return `<div class="text-[11px] ${s.done?"text-neutral-600 line-through":"text-neutral-300"}">${sbox} ${esc(s.text)}</div>`;
-          }).join("")}</div>`
-        : "";
-      return `<div class="text-xs ${t.done?"text-neutral-500 line-through":"text-neutral-200"}">${box} ${esc(t.task)}${subs}</div>`;
-    }).join("") : `<div class="text-xs text-neutral-500">No prep tasks</div>`;
-
-    return `
-      <div class="bg-neutral-900 border border-neutral-800 rounded-xl">
-        <button data-person="${esc(p)}" class="w-full px-3 py-3 flex items-center justify-between hover:bg-neutral-800/60 transition rounded-xl">
-          <div>
-            <div class="text-sm font-medium">${esc(titleCase(p))}</div>
-            <div class="text-xs text-neutral-400">Prep ${doneForP}/${totalsForP.grandTotal}</div>
-          </div>
-          <div class="text-xs text-neutral-300 flex items-center gap-2">
-            <span>${totalsForP.grandTotal} items</span>
-            <span class="chev">${isOpen ? "▴" : "▾"}</span>
-          </div>
-        </button>
-        <div class="person-details ${isOpen ? "" : "hidden"} px-3 pb-3 space-y-2">
-          <div>
-            <div class="text-xs uppercase tracking-widest text-neutral-500 mb-1">prep tasks</div>
-            <div class="space-y-1">${prepList}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  dashByPerson.innerHTML = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">by person</div>
-    <div class="space-y-2">${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}</div>
-  `;
-
-  dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const key = btn.getAttribute("data-person");
-      const details = btn.parentElement.querySelector(".person-details");
-      const chev = btn.querySelector(".chev");
-      const open = !details.classList.contains("hidden");
-
-      details.classList.toggle("hidden", open);
-      chev.textContent = open ? "▾" : "▴";
-
-      if(open) openPeople.delete(key);
-      else openPeople.add(key);
-    });
-  });
-
-  dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.getAttribute("data-scrub-id");
-      if(window.__selectedScrubId === id){
-        gotoRunItem(id);
-        return;
-      }
-      window.__selectedScrubId = id;
-      renderDash(false);
-    });
-  });
-
-  renderDashRandomTask();
-  renderGlobalAlarmOverlay();
+  // keep the rest light
+  dashBars.innerHTML = `<div class="text-sm text-neutral-500">Progress bars removed for simplicity.</div>`;
+  dashByPerson.innerHTML = `<div class="text-sm text-neutral-500">By-person summary hidden for simplicity.</div>`;
+  dashRandomTask.innerHTML = `<div class="text-sm text-neutral-500">Random task helper still available if you want it back later.</div>`;
 }
 
 /* ---------------------------
@@ -2300,12 +1491,7 @@ btnClearAll.addEventListener("click",()=>{
   clearState();
   timeline = DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
   prepTasks = [];
-  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; activeDelay=null;
-  alarmActiveIds.clear();
-  acknowledgedDoneIds.clear();
-  chimeFiredInIds.clear();
-  stopGlobalAlarmIfNoneActive();
-  stopTicking();
+  resetRun();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
 });
 
@@ -2323,11 +1509,7 @@ renderPlan();
 rebuildTimers();
 seedPrepTasks(true);
 setView(view || "plan");
-
-if(startedAtTs){
-  startTicking();
-  if(isRunning) setView("run");
-}
+if(startedAtTs) startTicking();
 </script>
 </body>
 </html>
