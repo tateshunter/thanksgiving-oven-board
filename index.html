@@ -49,7 +49,7 @@
     <!-- PLAN VIEW -->
     <section id="view-plan" class="space-y-3">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div class="text-sm text-neutral-400">Edit rows to match your exact plan.</div>
+        <div class="text-sm text-neutral-400">Edit rows to match your exact plan. For “Set oven temp,” use the Oven Temp column.</div>
         <div class="flex items-center gap-2 flex-wrap">
           <button id="btn-sort-time" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">↕ Sort by time</button>
           <button id="btn-add-row" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm inline-flex items-center gap-2 hover:bg-neutral-800 transition">➕ Add row</button>
@@ -165,7 +165,6 @@ Set table"></textarea>
           <button id="btn-dash-refresh" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Refresh</button>
         </div>
 
-        <!-- control tower panel -->
         <div id="dash-now-next" class="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3"></div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -196,22 +195,23 @@ const actions = [
 ];
 
 const DEFAULT_TIMELINE = [
-  { time: "1:00 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
+  // NOTE: set oven temp rows now store target temp in temp column
+  { time: "1:00 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "1:15 PM", temp: 350, action: "put in", item: "coca cola cake", cookMin: 20, person: "" },
-  { time: "1:35 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
+  { time: "1:35 PM", temp: 375, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "1:45 PM", temp: 375, action: "put in", item: "pb sheet cake", cookMin: 15, person: "" },
   { time: "2:00–2:45 PM", temp: "—", action: "flex / oven off", item: "desserts cooling, prep window", cookMin: "—", person: "" },
-  { time: "2:45 PM", temp: "—", action: "set oven temp", item: "to 375", cookMin: "—", person: "" },
+  { time: "2:45 PM", temp: 375, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "3:00 PM", temp: 375, action: "put in", item: "rolls", cookMin: 10, person: "" },
-  { time: "3:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
+  { time: "3:10 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "3:35 PM", temp: 350, action: "put in", item: "corn casserole", cookMin: 50, person: "" },
   { time: "3:55 PM", temp: 350, action: "put in", item: "pineapple casserole", cookMin: 30, person: "" },
   { time: "4:05 PM", temp: 350, action: "put in", item: "green bean casserole", cookMin: 20, person: "" },
-  { time: "4:25 PM", temp: "—", action: "set oven temp", item: "to 450", cookMin: "—", person: "" },
+  { time: "4:25 PM", temp: 450, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "4:25 PM", temp: 450, action: "put in", item: "stuffing/dressing", cookMin: 30, person: "" },
-  { time: "4:55 PM", temp: "—", action: "set oven temp", item: "to 400", cookMin: "—", person: "" },
+  { time: "4:55 PM", temp: 400, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "4:58 PM", temp: 400, action: "put in", item: "bacon wrapped asparagus", cookMin: 12, person: "" },
-  { time: "5:10 PM", temp: "—", action: "set oven temp", item: "to 350", cookMin: "—", person: "" },
+  { time: "5:10 PM", temp: 350, action: "set oven temp", item: "", cookMin: "—", person: "" },
   { time: "5:15 PM", temp: 350, action: "put in", item: "mac and cheese", cookMin: 30, person: "" },
   { time: "5:45 PM", temp: 350, action: "reheat window", item: "final reheat window (covered)", cookMin: 15, person: "" },
   { time: "6:00 PM", temp: "—", action: "serve", item: "everything", cookMin: "—", person: "" },
@@ -332,6 +332,10 @@ let prepTasks = [];
 let alarmActiveIds = new Set();
 let acknowledgedDoneIds = new Set();
 
+// Active delay for ONE overdue oven item at a time.
+let activeDelay = null; 
+// shape: { itemId: string, startTs: number }
+
 /* ---------------------------
    AUDIO ALARM
 ----------------------------*/
@@ -370,7 +374,7 @@ function stopGlobalAlarmIfNoneActive() {
 /* ---------------------------
    PERSISTENCE
 ----------------------------*/
-const STORAGE_KEY = "thanksgiving-oven-board:v3";
+const STORAGE_KEY = "thanksgiving-oven-board:v6";
 
 function saveState(silent=false) {
   try {
@@ -381,6 +385,7 @@ function saveState(silent=false) {
       isRunning,
       pausedAtTs,
       pausedAccumMs,
+      activeDelay,
       view,
       sortAsc,
       acknowledgedDoneIds: [...acknowledgedDoneIds],
@@ -413,6 +418,11 @@ function loadState() {
     isRunning = data.isRunning ?? false;
     pausedAtTs = data.pausedAtTs ?? null;
     pausedAccumMs = data.pausedAccumMs ?? 0;
+
+    activeDelay = (data.activeDelay && data.activeDelay.itemId && data.activeDelay.startTs)
+      ? data.activeDelay
+      : null;
+
     view = data.view ?? "plan";
     sortAsc = data.sortAsc ?? true;
 
@@ -534,6 +544,7 @@ function renderPlan() {
     tdTemp.querySelector("select").addEventListener("change", (e) => {
       r.temp = e.target.value === "—" ? "—" : parseInt(e.target.value, 10);
       rebuildTimers(); saveState(true);
+      renderPlan();
     });
 
     const tdAction = document.createElement("td");
@@ -696,6 +707,75 @@ function acknowledgeDone(id){
   saveState(true);
 }
 
+/* Planner event helpers */
+function getSortedPlannerEvents(){
+  if(anchorMin == null) return [];
+  return timeline
+    .map(r=>{
+      const plannedMin = parseTimeToMinutes(r.time);
+      if(plannedMin == null) return null;
+      return {
+        id: r.id,
+        action: r.action,
+        temp: r.temp,
+        time: r.time,
+        item: r.item,
+        offsetMs: (plannedMin - anchorMin) * 60000
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.offsetMs-b.offsetMs);
+}
+function getNextPlannerEvent(rowId){
+  const evs = getSortedPlannerEvents();
+  const i = evs.findIndex(e=>e.id===rowId);
+  return i>=0 ? (evs[i+1] || null) : null;
+}
+
+/* Delay / Pause logic */
+function pauseTimelineForItem(itemId){
+  if(activeDelay) return; // one delay at a time
+  activeDelay = { itemId, startTs: Date.now() };
+
+  // pause overall timeline (elapsedMs freezes)
+  if(isRunning){
+    isRunning = false;
+    pausedAtTs = Date.now();
+  }
+
+  // keep ticking so extra timer renders
+  startTicking();
+
+  // stop alarms while paused
+  alarmActiveIds.clear();
+  stopGlobalAlarmIfNoneActive();
+
+  renderRun(); renderDash(); saveState(true);
+}
+
+function finishDelayedItem(itemId){
+  if(!activeDelay || activeDelay.itemId !== itemId){
+    // normal "done on time"
+    acknowledgeDone(itemId);
+    return;
+  }
+
+  const extraMs = Date.now() - activeDelay.startTs;
+  activeDelay = null;
+
+  // offset timeline by extra time
+  pausedAccumMs += extraMs;
+
+  // resume timeline
+  pausedAtTs = null;
+  isRunning = true;
+
+  startTicking();
+
+  acknowledgeDone(itemId);
+  renderRun(); renderDash(); saveState(true);
+}
+
 function renderRun(){
   btnRunReset.classList.toggle("hidden", !startedAtTs);
   btnRunPause.classList.toggle("hidden", !(startedAtTs && isRunning));
@@ -740,7 +820,7 @@ function renderRun(){
       ${tempChangeItems.map(tc=>{
         const rem = tc.offsetMs - eMs;
         const due = rem<=0;
-        const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : (tc.item||"—");
+        const tempText = tc.targetTemp ? `${tc.targetTemp}°F` : "—";
         return `<div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
           <div><div class="text-sm font-medium">Set temp → ${tempText}</div><div class="text-xs text-neutral-400">Planned: ${tc.time}</div></div>
           <div class="text-sm font-semibold ${due?"text-amber-300":"text-neutral-100"}">${due?"NOW":fmtCountdownHours(rem)}</div>
@@ -759,19 +839,43 @@ function renderRun(){
     const inOven = prepLeftMs<=0 && untilDoneMs>0;
     const overdue = untilDoneMs<=0;
 
-    const needsAlarm = overdue && !acknowledgedDoneIds.has(it.id);
+    const isDone = acknowledgedDoneIds.has(it.id);
+    const isDelayedCard = activeDelay && activeDelay.itemId === it.id;
+    const extraMs = isDelayedCard ? (Date.now() - activeDelay.startTs) : 0;
+
+    // alarm only when overdue + not done + not currently delaying
+    const needsAlarm = overdue && !isDone && !isDelayedCard;
     if (needsAlarm) alarmActiveIds.add(it.id);
     else alarmActiveIds.delete(it.id);
 
-    const statusClass = overdue
-      ? "bg-rose-500/20 text-rose-200 border border-rose-500/40"
-      : inOven
-      ? "bg-amber-500/20 text-amber-200 border border-amber-500/40"
-      : "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
-    const statusText = overdue ? "should be done" : inOven ? "in oven now" : "prep time left";
+    let statusClass, statusText;
+    if(isDone){
+      statusClass = "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
+      statusText = "done";
+    } else if(isDelayedCard){
+      statusClass = "bg-amber-500/20 text-amber-200 border border-amber-500/40";
+      statusText = "extra oven time";
+    } else if(overdue){
+      statusClass = "bg-rose-500/20 text-rose-200 border border-rose-500/40";
+      statusText = "timer expired";
+    } else if(inOven){
+      statusClass = "bg-amber-500/20 text-amber-200 border border-amber-500/40";
+      statusText = "in oven now";
+    } else {
+      statusClass = "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
+      statusText = "prep time left";
+    }
+
+    // next temp reminder if done
+    const nextEv = isDone ? getNextPlannerEvent(it.id) : null;
+    const showNextTemp = isDone && nextEv && nextEv.action === "set oven temp" && nextEv.temp !== "—";
 
     const card = document.createElement("div");
-    card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
+    card.className = "border rounded-2xl p-4 space-y-3 " + (
+      isDone
+        ? "bg-emerald-500/10 border-emerald-500/40"
+        : "bg-neutral-950 border-neutral-800"
+    );
     if (needsAlarm) card.classList.add("alarm-tile");
 
     card.innerHTML = `
@@ -780,17 +884,57 @@ function renderRun(){
         <div class="text-xs text-neutral-400">Planned: ${it.plannedTime} • Cook ${it.cookMin} min • ${it.temp==="—"?"—":it.temp+"°F"}</div>
         ${it.person ? `<div class="text-xs text-neutral-300">👤 ${titleCase(it.person)}</div>` : ``}
       </div>
+
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">prep time left (until oven)</div>
         <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(prepLeftMs)}</div>
       </div>
+
       <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
         <div class="text-xs text-neutral-400">time until done</div>
         <div class="text-base font-semibold inline-flex items-center gap-2">⏲ ${fmtCountdownHours(untilDoneMs)}</div>
       </div>
+
+      ${isDelayedCard ? `
+        <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
+          <div class="text-xs text-neutral-400">additional oven time</div>
+          <div class="text-base font-semibold inline-flex items-center gap-2">➕ ${fmtCountdownHours(extraMs)}</div>
+        </div>
+      ` : ``}
+
+      ${showNextTemp ? `
+        <div class="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+          🔔 Next up: set oven to <span class="font-semibold">${nextEv.temp}°F</span> at ${nextEv.time}
+        </div>
+      ` : ``}
+
       <div class="flex items-center justify-between">
         <div class="text-xs rounded-lg px-2 py-1 inline-block ${statusClass}">${statusText}</div>
-        ${needsAlarm ? `<button class="bg-red-500 hover:bg-red-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold" data-ack="${it.id}">Removed from oven</button>` : ``}
+
+        ${
+          needsAlarm
+            ? `
+              <div class="flex items-center gap-2">
+                <button
+                  class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-ack="${it.id}"
+                >Item done</button>
+
+                <button
+                  class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-delay="${it.id}"
+                >Pause cook (need more time)</button>
+              </div>
+            `
+            : isDelayedCard
+              ? `
+                <button
+                  class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                  data-ack="${it.id}"
+                >Item done – resume timeline</button>
+              `
+              : ``
+        }
       </div>
     `;
 
@@ -803,28 +947,73 @@ function renderRun(){
   timersGrid.querySelectorAll("[data-ack]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-ack");
-      acknowledgeDone(id);
+      finishDelayedItem(id);
+    });
+  });
+
+  timersGrid.querySelectorAll("[data-delay]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-delay");
+      pauseTimelineForItem(id);
     });
   });
 }
 
-function startRun(){ startedAtTs=Date.now(); isRunning=true; pausedAtTs=null; pausedAccumMs=0; setView("run"); startTicking(); renderRun(); renderDash(); saveState(true); }
-function pauseRun(){ if(!isRunning) return; isRunning=false; pausedAtTs=Date.now(); stopTicking(); renderRun(); renderDash(); saveState(true); }
+function startRun(){
+  startedAtTs=Date.now();
+  isRunning=true;
+  pausedAtTs=null;
+  pausedAccumMs=0;
+  activeDelay=null;
+  setView("run");
+  startTicking();
+  renderRun();
+  renderDash();
+  saveState(true);
+}
+
+function pauseRun(){
+  if(!isRunning) return;
+  isRunning=false;
+  pausedAtTs=Date.now();
+  startTicking();
+  renderRun();
+  renderDash();
+  saveState(true);
+}
+
 function resumeRun(){
   if(!startedAtTs) return startRun();
   if(pausedAtTs){ pausedAccumMs += (Date.now()-pausedAtTs); pausedAtTs=null; }
-  isRunning=true; startTicking(); renderRun(); renderDash(); saveState(true);
+  isRunning=true;
+  startTicking();
+  renderRun();
+  renderDash();
+  saveState(true);
 }
+
 function resetRun(){
   stopTicking();
-  startedAtTs=null; isRunning=false; pausedAtTs=null; pausedAccumMs=0;
+  startedAtTs=null;
+  isRunning=false;
+  pausedAtTs=null;
+  pausedAccumMs=0;
+  activeDelay=null;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   stopGlobalAlarmIfNoneActive();
-  renderRun(); renderDash(); saveState(true);
+  renderRun();
+  renderDash();
+  saveState(true);
 }
-function startTicking(){ stopTicking(); tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500); }
-function stopTicking(){ if(tickInterval) clearInterval(tickInterval); tickInterval=null; }
+function startTicking(){
+  stopTicking();
+  tickInterval=setInterval(()=>{renderRun(); renderDash(false);},500);
+}
+function stopTicking(){
+  if(tickInterval) clearInterval(tickInterval);
+  tickInterval=null;
+}
 
 /* ---------------------------
    PREP BOARD
@@ -1141,7 +1330,7 @@ function renderDashNowNext(){
           <div class="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2">
             <div>
               <div class="text-sm font-medium">${capFirst(r.action)} — ${titleCase(r.item||"")}</div>
-              <div class="text-xs text-neutral-400">${r.time}${r.person?` • 👤 ${titleCase(r.person)}`:""}</div>
+              <div class="text-xs text-neutral-400">${r.time}${r.action==="set oven temp" && r.temp!=="—" ? ` • → ${r.temp}°F` : ""}${r.person?` • 👤 ${titleCase(r.person)}`:""}</div>
             </div>
           </div>
         `).join("") || `<div class="text-sm text-neutral-500">No planned rows with parseable times yet.</div>`}
@@ -1231,6 +1420,7 @@ function renderDashNowNext(){
           <div class="text-xs text-neutral-400">
             Planned: ${nextEvent.time}
             ${nextEvent.person?` • 👤 ${titleCase(nextEvent.person)}`:""}
+            ${nextEvent.action==="set oven temp" && nextEvent.temp!=="—" ? ` • → ${nextEvent.temp}°F` : ``}
           </div>
           <div class="text-2xl font-bold mt-1">⏳ ${fmtCountdownHours(nextEvent.offsetMs - eMs)}</div>
         ` : `
@@ -1324,6 +1514,7 @@ function renderDash(){
     <div class="text-sm">🔥 Oven dishes done: <span class="font-semibold">${doneOven}/${totalOven}</span></div>
     <div class="text-sm">🌡️ Temp changes left: <span class="font-semibold">${tempChangeItems.length}</span></div>
     ${nextOven ? `<div class="mt-2 text-xs text-neutral-300">Next oven item: <span class="font-semibold">${titleCase(nextOven.item||"")}</span> in ${fmtCountdownHours(nextOven.inOffsetMs - elapsedMs())}</div>` : ``}
+    ${activeDelay ? `<div class="mt-2 text-xs text-amber-300">⏸ Cook paused for extra oven time</div>` : ``}
   `;
 
   dashBars.innerHTML = `
@@ -1467,7 +1658,7 @@ btnClearAll.addEventListener("click",()=>{
   clearState();
   timeline = DEFAULT_TIMELINE.map(r=>({id:uuid(),...r}));
   prepTasks = [];
-  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0;
+  startedAtTs = null; isRunning=false; pausedAtTs=null; pausedAccumMs=0; activeDelay=null;
   alarmActiveIds.clear();
   acknowledgedDoneIds.clear();
   stopGlobalAlarmIfNoneActive();
@@ -1484,9 +1675,9 @@ rebuildTimers();
 seedPrepTasks(true);
 setView(view || "plan");
 
-if(startedAtTs && isRunning){
+if(startedAtTs){
   startTicking();
-  setView("run");
+  if(isRunning) setView("run");
 }
 </script>
 </body>
