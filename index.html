@@ -287,6 +287,28 @@ function parseTimeToMinutes(raw) {
   return hh * 60 + mm;
 }
 
+/* total tasks + subtasks helper */
+function taskTotals(tasksArr){
+  const parentsTotal = tasksArr.length;
+  const parentsDone  = tasksArr.filter(t => t.done).length;
+
+  let subsTotal = 0;
+  let subsDone  = 0;
+
+  tasksArr.forEach(t => {
+    const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
+    subsTotal += subs.length;
+    subsDone  += subs.filter(s => s.done).length;
+  });
+
+  return {
+    parentsTotal, parentsDone,
+    subsTotal, subsDone,
+    grandTotal: parentsTotal + subsTotal,
+    grandDone: parentsDone + subsDone
+  };
+}
+
 /* ---------------------------
    STATE
 ----------------------------*/
@@ -375,7 +397,6 @@ function loadState() {
     if (Array.isArray(data.timeline)) timeline = data.timeline;
 
     if (Array.isArray(data.prepTasks)) {
-      // normalize old tasks to include subtasks
       prepTasks = data.prepTasks.map(t => ({
         subtasks: [],
         ...t,
@@ -958,14 +979,17 @@ function renderPrep(){
 
   Object.keys(byPerson).sort().forEach(person => {
     const tasks = byPerson[person];
-    const doneCount = tasks.filter(x=>x.done).length;
+    const totals = taskTotals(tasks);
 
     const card = document.createElement("div");
     card.className = "bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3";
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="text-lg font-semibold">${titleCase(person)}</div>
-        <div class="text-xs text-neutral-400">${doneCount}/${tasks.length} done</div>
+        <div class="text-xs text-neutral-400">
+          ${totals.grandDone}/${totals.grandTotal} done
+          ${totals.subsTotal ? `<span class="text-neutral-500 ml-1">(${totals.parentsTotal} tasks + ${totals.subsTotal} subtasks)</span>` : ``}
+        </div>
       </div>
 
       <div class="flex items-center gap-2">
@@ -1122,9 +1146,10 @@ function renderDash(){
       </div>`;
   }
 
-  const totalPrep = prepTasks.length;
-  const donePrep = prepTasks.filter(t=>t.done).length;
-  const prepPct = totalPrep ? Math.round(donePrep/totalPrep*100) : 0;
+  const prepTotalsAll = taskTotals(prepTasks);
+  const totalPrep = prepTotalsAll.grandTotal;
+  const donePrep  = prepTotalsAll.grandDone;
+  const prepPct   = totalPrep ? Math.round(donePrep/totalPrep*100) : 0;
 
   const totalOven = timerItems.length;
   const doneOven = totalOven ? timerItems.filter(t => startedAtTs && elapsedMs() >= t.doneOffsetMs).length : 0;
@@ -1138,7 +1163,8 @@ function renderDash(){
 
   dashNumbers.innerHTML = `
     <div class="text-xs uppercase tracking-widest text-neutral-500">stats</div>
-    <div class="text-sm">🧑‍🍳 Prep tasks: <span class="font-semibold">${donePrep}/${totalPrep}</span></div>
+    <div class="text-sm">🧑‍🍳 Prep items: <span class="font-semibold">${donePrep}/${totalPrep}</span></div>
+    <div class="text-xs text-neutral-500 ml-6">(${prepTotalsAll.parentsTotal} tasks + ${prepTotalsAll.subsTotal} subtasks)</div>
     <div class="text-sm">🔥 Oven dishes done: <span class="font-semibold">${doneOven}/${totalOven}</span></div>
     <div class="text-sm">🌡️ Temp changes left: <span class="font-semibold">${tempChangeItems.length}</span></div>
     ${nextOven ? `<div class="mt-2 text-xs text-neutral-300">Next oven item: <span class="font-semibold">${titleCase(nextOven.item||"")}</span> in ${fmtCountdownHours(nextOven.inOffsetMs - elapsedMs())}</div>` : ``}
@@ -1165,7 +1191,8 @@ function renderDash(){
 
   const byPersonHtml = [...people].sort().map(p => {
     const prepForP = prepTasks.filter(t=>normalizePerson(t.person)===p);
-    const doneForP = prepForP.filter(t=>t.done).length;
+    const totalsForP = taskTotals(prepForP);
+    const doneForP = totalsForP.grandDone;
     const isOpen = openPeople.has(p);
 
     const prepList = prepForP.length ? prepForP.map(t => {
@@ -1184,10 +1211,10 @@ function renderDash(){
         <button data-person="${p}" class="w-full px-3 py-3 flex items-center justify-between hover:bg-neutral-800/60 transition rounded-xl">
           <div>
             <div class="text-sm font-medium">${titleCase(p)}</div>
-            <div class="text-xs text-neutral-400">Prep ${doneForP}/${prepForP.length}</div>
+            <div class="text-xs text-neutral-400">Prep ${doneForP}/${totalsForP.grandTotal}</div>
           </div>
           <div class="text-xs text-neutral-300 flex items-center gap-2">
-            <span>${prepForP.length} tasks</span>
+            <span>${totalsForP.grandTotal} items</span>
             <span class="chev">${isOpen ? "▴" : "▾"}</span>
           </div>
         </button>
