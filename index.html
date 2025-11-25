@@ -810,6 +810,7 @@ function getSortedPlannerEvents(){
         temp: r.temp,
         time: r.time,
         item: r.item,
+        person: r.person,
         offsetMs: (plannedMin - anchorMin) * 60000
       };
     })
@@ -1648,7 +1649,7 @@ function renderDashNowNext(){
 }
 
 /* ---------------------------
-   DASHBOARD SCRUBBER
+   DASHBOARD SCRUBBER (fixed for iPad)
 ----------------------------*/
 function renderDashScrubber(){
   if(anchorMin == null){
@@ -1660,14 +1661,33 @@ function renderDashScrubber(){
     return `<div class="text-sm text-neutral-400">No scheduled events yet.</div>`;
   }
 
+  // persistent selected dot for tapping
+  window.__selectedScrubId = window.__selectedScrubId || null;
+  const selectedId = window.__selectedScrubId;
+
   const totalMs = (events[events.length-1].offsetMs - events[0].offsetMs) || 1;
   const eMs = hasStarted() ? elapsedMs() : 0;
-
   const pctNow = Math.min(100, Math.max(0, (eMs / totalMs) * 100));
 
-  const dotHtml = events.map(ev=>{
+  // lane packing to prevent overlaps
+  const minGapPct = 6;
+  const laneLastPct = [-Infinity, -Infinity, -Infinity];
+  const laneOffsetsPx = [16, 30, 44];
+
+  const dotsWithLanes = events.map((ev) => {
     const leftPct = ((ev.offsetMs - events[0].offsetMs) / totalMs) * 100;
 
+    let lane = laneLastPct.findIndex(last => (leftPct - last) >= minGapPct);
+    if(lane < 0){
+      const minLast = Math.min(...laneLastPct);
+      lane = laneLastPct.indexOf(minLast);
+    }
+    laneLastPct[lane] = leftPct;
+
+    return { ...ev, leftPct, lane };
+  });
+
+  const dotHtml = dotsWithLanes.map(ev=>{
     const isTemp  = ev.action === "set oven temp";
     const isServe = ev.action === "serve";
     const overdue = hasStarted() && ev.action==="put in" && eMs > ev.offsetMs;
@@ -1679,19 +1699,22 @@ function renderDashScrubber(){
         : "bg-emerald-400";
 
     const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
+    const selectedClass = ev.id === selectedId ? "ring-2 ring-white/90" : "";
 
     const label = `${capFirst(ev.action)} — ${titleCase(ev.item||"")} (${ev.time})`;
+    const labelTop = laneOffsetsPx[ev.lane] ?? 16;
 
     return `
       <button
-        class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${dotClass} ${pulseClass}"
-        style="left:${leftPct}%"
-        title="${label}"
+        class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${dotClass} ${pulseClass} ${selectedClass}"
+        style="left:${ev.leftPct}%"
+        aria-label="${label}"
         data-scrub-id="${ev.id}"
       ></button>
+
       <div
-        class="absolute top-[calc(50%+14px)] text-[10px] text-neutral-400 whitespace-nowrap -translate-x-1/2"
-        style="left:${leftPct}%"
+        class="absolute text-[10px] text-neutral-300 whitespace-nowrap -translate-x-1/2 select-none"
+        style="left:${ev.leftPct}%; top: calc(50% + ${labelTop}px);"
       >
         ${ev.time}
       </div>
@@ -1702,11 +1725,13 @@ function renderDashScrubber(){
     ? `<div class="absolute top-0 bottom-0 w-[3px] bg-white/80 shadow" style="left:${pctNow}%"></div>`
     : `<div class="absolute top-0 bottom-0 w-[3px] bg-white/20" style="left:0%"></div>`;
 
+  const selectedEv = selectedId ? dotsWithLanes.find(e => e.id === selectedId) : null;
+
   return `
     <div class="space-y-2">
       <div class="text-xs uppercase tracking-widest text-neutral-500">timeline</div>
 
-      <div class="relative h-16 bg-neutral-900 border border-neutral-800 rounded-2xl px-3">
+      <div class="relative h-24 bg-neutral-900 border border-neutral-800 rounded-2xl px-3">
         <div class="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-2 rounded-full bg-neutral-800"></div>
         ${nowLine}
         ${dotHtml}
@@ -1716,6 +1741,28 @@ function renderDashScrubber(){
         <div>${events[0].time}</div>
         <div>${events[events.length-1].time}</div>
       </div>
+
+      ${
+        selectedEv ? `
+          <div id="scrub-selected"
+               class="mt-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm">
+            <div class="text-xs uppercase tracking-widest text-neutral-500">selected event</div>
+            <div class="mt-1 font-semibold">
+              ${capFirst(selectedEv.action)} — ${titleCase(selectedEv.item || "(no item)")}
+            </div>
+            <div class="text-xs text-neutral-400 mt-0.5">
+              Time: ${selectedEv.time}
+              ${selectedEv.temp !== "—" ? ` • Temp: ${selectedEv.temp}°F` : ``}
+              ${selectedEv.person ? ` • 👤 ${titleCase(selectedEv.person)}` : ``}
+            </div>
+            <div class="text-xs text-neutral-500 mt-1">
+              Tap another dot to switch, or tap again to jump to it in Oven Timers.
+            </div>
+          </div>
+        ` : `
+          <div class="text-xs text-neutral-500 mt-1">Tap a dot to see details.</div>
+        `
+      }
     </div>
   `;
 }
@@ -1918,10 +1965,16 @@ function renderDash(){
     });
   });
 
+  // updated scrubber click: tap to select, tap again to jump to Run
   dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.getAttribute("data-scrub-id");
-      gotoRunItem(id);
+      if(window.__selectedScrubId === id){
+        gotoRunItem(id);
+        return;
+      }
+      window.__selectedScrubId = id;
+      renderDash(false);
     });
   });
 
