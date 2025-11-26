@@ -1475,7 +1475,10 @@ function startTicking(){
   stopTicking();
   tickInterval=setInterval(()=>{
     renderRun();
-    renderDash();
+
+    // live-only dashboard refresh (prevents task flashing)
+    if(view === "dash") renderDash(true);
+
     /* CRITICAL FIX: do NOT rebuild plan while ticking */
     if(view==="plan" && !isEditingPlan()){
       updatePlanRowHighlights();
@@ -2214,7 +2217,7 @@ function renderDashScrubber(){
 /* ---------------------------
    DASHBOARD COMMAND CENTER
 ----------------------------*/
-function renderDash(){
+function renderDash(liveOnly=false){
   renderDashNowNext();
 
   const live = hasStarted();
@@ -2401,38 +2404,82 @@ function renderDash(){
     `;
   }).join("");
 
-dashByPerson.innerHTML = `
-  <div class="text-xs uppercase tracking-widest text-neutral-500 mb-2">by person</div>
+  if(!liveOnly){
+    dashByPerson.innerHTML = `
+      <div class="text-xs uppercase tracking-widest text-neutral-500 mb-2">by person</div>
 
-  <!-- two-column layout on lg+, stacked on mobile -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
-    <!-- LEFT: tasks/people list -->
-    <div class="lg:col-span-2 space-y-2">
-      ${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}
-    </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+        <div class="lg:col-span-2 space-y-2">
+          ${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}
+        </div>
 
-    <!-- RIGHT: random task picker -->
-    <div class="lg:col-span-1">
-      ${renderDashRandomPicker()}
-    </div>
-  </div>
-`;
+        <div class="lg:col-span-1">
+          ${renderDashRandomPicker()}
+        </div>
+      </div>
+    `;
 
+    dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-person");
+        const details = btn.parentElement.querySelector(".person-details");
+        const chev = btn.querySelector(".chev");
+        const open = !details.classList.contains("hidden");
 
-  dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const key = btn.getAttribute("data-person");
-      const details = btn.parentElement.querySelector(".person-details");
-      const chev = btn.querySelector(".chev");
-      const open = !details.classList.contains("hidden");
+        details.classList.toggle("hidden", open);
+        chev.textContent = open ? "▾" : "▴";
 
-      details.classList.toggle("hidden", open);
-      chev.textContent = open ? "▾" : "▴";
-
-      if(open) openPeople.delete(key);
-      else openPeople.add(key);
+        if(open) openPeople.delete(key);
+        else openPeople.add(key);
+      });
     });
-  });
+
+    /* Random task picker wires */
+    const randomSelect = dashByPerson.querySelector("#random-person-select");
+    const randomPickBtn = dashByPerson.querySelector("#btn-random-pick");
+    const randomDoneBtn = dashByPerson.querySelector("#btn-random-done");
+    const randomAgainBtn = dashByPerson.querySelector("#btn-random-again");
+
+    if(randomSelect){
+      randomSelect.addEventListener("change", () => {
+        window.__randomPickPerson = randomSelect.value;
+        window.__randomPickedTask = null;
+        renderDash();
+        saveState(true);
+      });
+    }
+
+    if(randomPickBtn){
+      randomPickBtn.addEventListener("click", () => {
+        const person = window.__randomPickPerson || "__ALL__";
+        const picked = getRandomAvailablePrepTask(person);
+        window.__randomPickedTask = picked;
+        renderDash();
+        saveState(true);
+      });
+    }
+
+    if(randomDoneBtn){
+      randomDoneBtn.addEventListener("click", () => {
+        const picked = window.__randomPickedTask;
+        if(!picked) return;
+        markRandomTaskDone(picked);
+        window.__randomPickedTask = null;
+        renderDash();
+        saveState(true);
+      });
+    }
+
+    if(randomAgainBtn){
+      randomAgainBtn.addEventListener("click", () => {
+        const person = window.__randomPickPerson || "__ALL__";
+        const picked = getRandomAvailablePrepTask(person);
+        window.__randomPickedTask = picked;
+        renderDash();
+        saveState(true);
+      });
+    }
+  }
 
   dashBars.querySelectorAll("[data-scrub-id]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
@@ -2445,52 +2492,6 @@ dashByPerson.innerHTML = `
       renderDash();
     });
   });
-
-  /* Random task picker wires */
-  const randomSelect = dashByPerson.querySelector("#random-person-select");
-  const randomPickBtn = dashByPerson.querySelector("#btn-random-pick");
-  const randomDoneBtn = dashByPerson.querySelector("#btn-random-done");
-  const randomAgainBtn = dashByPerson.querySelector("#btn-random-again");
-
-  if(randomSelect){
-    randomSelect.addEventListener("change", () => {
-      window.__randomPickPerson = randomSelect.value;
-      window.__randomPickedTask = null;
-      renderDash();
-      saveState(true);
-    });
-  }
-
-  if(randomPickBtn){
-    randomPickBtn.addEventListener("click", () => {
-      const person = window.__randomPickPerson || "__ALL__";
-      const picked = getRandomAvailablePrepTask(person);
-      window.__randomPickedTask = picked;
-      renderDash();
-      saveState(true);
-    });
-  }
-
-  if(randomDoneBtn){
-    randomDoneBtn.addEventListener("click", () => {
-      const picked = window.__randomPickedTask;
-      if(!picked) return;
-      markRandomTaskDone(picked);
-      window.__randomPickedTask = null;
-      renderDash();
-      saveState(true);
-    });
-  }
-
-  if(randomAgainBtn){
-    randomAgainBtn.addEventListener("click", () => {
-      const person = window.__randomPickPerson || "__ALL__";
-      const picked = getRandomAvailablePrepTask(person);
-      window.__randomPickedTask = picked;
-      renderDash();
-      saveState(true);
-    });
-  }
 
   renderGlobalAlarmOverlay();
 }
