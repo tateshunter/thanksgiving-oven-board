@@ -551,6 +551,9 @@ function saveState(silent=false) {
       acknowledgedDoneIds: [...acknowledgedDoneIds],
       chimeFiredInIds: [...chimeFiredInIds],
       bellFiredNextTempIds: [...bellFiredNextTempIds],
+      // persist random picker UI state
+      randomPickPerson: window.__randomPickPerson || "__ALL__",
+      randomPickedTask: window.__randomPickedTask || null,
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -604,6 +607,10 @@ function loadState() {
     if (Array.isArray(data.bellFiredNextTempIds)) {
       bellFiredNextTempIds = new Set(data.bellFiredNextTempIds);
     }
+
+    // restore random picker UI state
+    window.__randomPickPerson = data.randomPickPerson || "__ALL__";
+    window.__randomPickedTask = data.randomPickedTask || null;
 
     return true;
   } catch (err) {
@@ -1794,6 +1801,139 @@ function renderPrep(){
 }
 
 /* ---------------------------
+   RANDOM TASK PICKER (dashboard)
+----------------------------*/
+function getRandomAvailablePrepTask(personFilter="__ALL__"){
+  const pool = [];
+
+  prepTasks.forEach(t => {
+    const p = normalizePerson(t.person);
+    if(!p) return;
+    if(personFilter !== "__ALL__" && p !== personFilter) return;
+
+    if(!t.done){
+      pool.push({
+        type: "parent",
+        id: t.id,
+        person: p,
+        text: t.task,
+      });
+    }
+
+    const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
+    subs.forEach(s => {
+      if(!s.done){
+        pool.push({
+          type: "sub",
+          id: s.id,
+          parentId: t.id,
+          person: p,
+          text: s.text,
+        });
+      }
+    });
+  });
+
+  if(!pool.length) return null;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+
+function markRandomTaskDone(taskObj){
+  if(!taskObj) return;
+
+  if(taskObj.type === "parent"){
+    prepTasks = prepTasks.map(t =>
+      t.id === taskObj.id ? { ...t, done: true } : t
+    );
+  } else if(taskObj.type === "sub"){
+    prepTasks = prepTasks.map(t => {
+      if(t.id !== taskObj.parentId) return t;
+      const subs = (t.subtasks || []).map(s =>
+        s.id === taskObj.id ? { ...s, done: true } : s
+      );
+      return { ...t, subtasks: subs };
+    });
+  }
+
+  renderDash();
+  renderPrep();
+  renderRun();
+  if(view==="plan" && !isEditingPlan()) updatePlanRowHighlights();
+  renderGlobalAlarmOverlay();
+  saveState(true);
+}
+
+function renderDashRandomPicker(){
+  const people = getAllKnownPeople();
+  const selectedPerson = window.__randomPickPerson || "__ALL__";
+  const picked = window.__randomPickedTask || null;
+
+  const personOptions =
+    `<option value="__ALL__">All people</option>` +
+    people.map(p => `
+      <option value="${p}" ${p===selectedPerson?"selected":""}>
+        ${titleCase(p)}
+      </option>
+    `).join("");
+
+  const pickedHtml = picked ? `
+    <div class="mt-3 bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2">
+      <div class="text-xs text-neutral-500 uppercase tracking-widest">random pick</div>
+      <div class="text-sm">
+        ${picked.text}
+      </div>
+      <div class="text-xs text-neutral-400">
+        👤 ${titleCase(picked.person)}
+        ${picked.type==="sub" ? " • subtask" : " • task"}
+      </div>
+
+      <div class="flex items-center gap-2 pt-1">
+        <button
+          class="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          id="btn-random-done"
+        >Mark done</button>
+
+        <button
+          class="bg-neutral-950 border border-neutral-700 hover:bg-neutral-800 text-neutral-100 rounded-lg px-3 py-1.5 text-xs font-semibold"
+          id="btn-random-again"
+        >Pick another</button>
+      </div>
+    </div>
+  ` : `
+    <div class="mt-3 text-xs text-neutral-500">
+      No random task picked yet.
+    </div>
+  `;
+
+  return `
+    <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-2">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">random task helper</div>
+      <div class="text-sm text-neutral-400">
+        For anyone free right now — grab something useful.
+      </div>
+
+      <div class="flex items-center gap-2 mt-2">
+        <select
+          id="random-person-select"
+          class="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-2 text-sm"
+        >
+          ${personOptions}
+        </select>
+
+        <button
+          id="btn-random-pick"
+          class="bg-blue-500 hover:bg-blue-400 text-neutral-950 rounded-lg px-3 py-2 text-sm font-semibold transition"
+        >
+          Pick random
+        </button>
+      </div>
+
+      ${pickedHtml}
+    </div>
+  `;
+}
+
+/* ---------------------------
    DASHBOARD CONTROL TOWER (NOW / NEXT)
 ----------------------------*/
 function renderDashNowNext(){
@@ -1994,14 +2134,13 @@ function renderDashScrubber(){
 
     const isFlex = ev.action === "flex / oven off";
 
-const dotClass = isServe
-  ? "bg-amber-300"     // serve
-  : isTemp
-    ? "bg-sky-400"     // temp change
-    : isFlex
-      ? "bg-violet-400" // flex window (own color dot)
-      : "bg-emerald-400"; // normal actions (put in, reheat, etc.)
-
+    const dotClass = isServe
+      ? "bg-amber-300"
+      : isTemp
+        ? "bg-sky-400"
+        : isFlex
+          ? "bg-violet-400"
+          : "bg-emerald-400";
 
     const pulseClass = overdue ? "animate-pulse ring-2 ring-rose-400/80" : "";
     const selectedClass = ev.id === selectedId ? "ring-2 ring-white/90" : "";
@@ -2264,7 +2403,12 @@ function renderDash(){
 
   dashByPerson.innerHTML = `
     <div class="text-xs uppercase tracking-widest text-neutral-500">by person</div>
-    <div class="space-y-2">${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}</div>
+
+    ${renderDashRandomPicker()}
+
+    <div class="space-y-2 mt-3">
+      ${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}
+    </div>
   `;
 
   dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
@@ -2293,6 +2437,52 @@ function renderDash(){
       renderDash();
     });
   });
+
+  /* Random task picker wires */
+  const randomSelect = dashByPerson.querySelector("#random-person-select");
+  const randomPickBtn = dashByPerson.querySelector("#btn-random-pick");
+  const randomDoneBtn = dashByPerson.querySelector("#btn-random-done");
+  const randomAgainBtn = dashByPerson.querySelector("#btn-random-again");
+
+  if(randomSelect){
+    randomSelect.addEventListener("change", () => {
+      window.__randomPickPerson = randomSelect.value;
+      window.__randomPickedTask = null;
+      renderDash();
+      saveState(true);
+    });
+  }
+
+  if(randomPickBtn){
+    randomPickBtn.addEventListener("click", () => {
+      const person = window.__randomPickPerson || "__ALL__";
+      const picked = getRandomAvailablePrepTask(person);
+      window.__randomPickedTask = picked;
+      renderDash();
+      saveState(true);
+    });
+  }
+
+  if(randomDoneBtn){
+    randomDoneBtn.addEventListener("click", () => {
+      const picked = window.__randomPickedTask;
+      if(!picked) return;
+      markRandomTaskDone(picked);
+      window.__randomPickedTask = null;
+      renderDash();
+      saveState(true);
+    });
+  }
+
+  if(randomAgainBtn){
+    randomAgainBtn.addEventListener("click", () => {
+      const person = window.__randomPickPerson || "__ALL__";
+      const picked = getRandomAvailablePrepTask(person);
+      window.__randomPickedTask = picked;
+      renderDash();
+      saveState(true);
+    });
+  }
 
   renderGlobalAlarmOverlay();
 }
@@ -2368,6 +2558,8 @@ btnClearAll.addEventListener("click",()=>{
   bellFiredNextTempIds.clear();
   expandedPrepInTimers.clear();
   anchorMinAtStart=null;
+  window.__randomPickPerson = "__ALL__";
+  window.__randomPickedTask = null;
   stopGlobalAlarmIfNoneActive();
   stopTicking();
   renderPlan(); rebuildTimers(); seedPrepTasks(true); setView("plan"); saveState();
