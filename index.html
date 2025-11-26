@@ -119,47 +119,72 @@
       </div>
     </section>
 
-    <!-- PREP BOARD VIEW -->
-    <section id="view-prep" class="space-y-4 hidden">
-      <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div class="text-xs uppercase tracking-widest text-neutral-500">prep board</div>
-            <div class="text-lg font-semibold">Tasks by person</div>
-            <div class="text-sm text-neutral-400">Auto-seeded from your plan (only when a person is assigned). Add anything else you need.</div>
-          </div>
-          <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">Re-seed from plan</button>
-        </div>
+<!-- PREP BOARD VIEW (UPDATED LAYOUT) -->
+<section id="view-prep" class="space-y-4 hidden">
+  <div class="bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-3xl p-5 space-y-4 shadow-lg">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <div class="text-xs uppercase tracking-widest text-neutral-500">prep board</div>
+        <div class="text-lg font-semibold">Tasks by person</div>
+        <div class="text-sm text-neutral-400">Auto-seeded from your plan (only when a person is assigned). Add anything else you need.</div>
+      </div>
+      <button id="btn-prep-seed" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm hover:bg-neutral-800 transition">
+        Re-seed from plan
+      </button>
+    </div>
 
-        <!-- Bulk add ONLY -->
-        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3">
+    <!-- TWO-COLUMN AREA -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      
+      <!-- LEFT: EXISTING PREP TASKS MODULE -->
+      <div class="lg:col-span-2">
+        <div id="prep-container" class="space-y-3"></div>
+      </div>
+
+      <!-- RIGHT: BULK ADD PANEL -->
+      <div class="lg:col-span-1">
+        <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 space-y-3 sticky top-4">
           <div class="text-sm font-semibold">Bulk add tasks for one person</div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 gap-3">
             <select id="prep-bulk-person" class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm">
               <option value="">Select existing person (optional)</option>
             </select>
-            <input id="prep-bulk-person-new" class="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm" placeholder="...or type a new person name" />
+
+            <input
+              id="prep-bulk-person-new"
+              class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
+              placeholder="...or type a new person name"
+            />
           </div>
 
-          <textarea id="prep-bulk-tasks" rows="4"
+          <textarea
+            id="prep-bulk-tasks"
+            rows="6"
             class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm"
             placeholder="One task per line:
 Chop onions
 Make gravy
-Set table"></textarea>
+Set table"
+          ></textarea>
 
-          <button id="btn-prep-bulk-add"
-            class="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition">
+          <button
+            id="btn-prep-bulk-add"
+            class="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl px-3 py-2 text-sm font-semibold transition"
+          >
             Add all tasks to this person
           </button>
 
-          <div class="text-xs text-neutral-500">Tip: paste a list from Notes or a text doc, one task per line.</div>
+          <div class="text-xs text-neutral-500">
+            Tip: paste a list from Notes or a text doc, one task per line.
+          </div>
         </div>
-
-        <div id="prep-container" class="space-y-3"></div>
       </div>
-    </section>
+
+    </div>
+  </div>
+</section>
+
 
     <!-- RUN VIEW -->
     <section id="view-run" class="space-y-4 hidden">
