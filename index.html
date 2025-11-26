@@ -2401,15 +2401,23 @@ function renderDash(){
     `;
   }).join("");
 
-  dashByPerson.innerHTML = `
-    <div class="text-xs uppercase tracking-widest text-neutral-500">by person</div>
+dashByPerson.innerHTML = `
+  <div class="text-xs uppercase tracking-widest text-neutral-500 mb-2">by person</div>
 
-    ${renderDashRandomPicker()}
-
-    <div class="space-y-2 mt-3">
+  <!-- two-column layout on lg+, stacked on mobile -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+    <!-- LEFT: tasks/people list -->
+    <div class="lg:col-span-2 space-y-2">
       ${byPersonHtml || `<div class="text-sm text-neutral-400">No people/tasks yet.</div>`}
     </div>
-  `;
+
+    <!-- RIGHT: random task picker -->
+    <div class="lg:col-span-1">
+      ${renderDashRandomPicker()}
+    </div>
+  </div>
+`;
+
 
   dashByPerson.querySelectorAll("button[data-person]").forEach(btn => {
     btn.addEventListener("click", () => {
